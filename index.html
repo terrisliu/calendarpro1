@@ -1,0 +1,3426 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2027 香港假期管理</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;900&display=swap');
+    body {
+      font-family: 'Noto Sans TC', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #f8fafc;
+    }
+    .calendar-cell {
+      position: relative;
+      height: 52px;
+      user-select: none;
+      -webkit-user-select: none;
+      transition: all 0.15s ease-in-out;
+      cursor: pointer;
+    }
+    .half-slot {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 50%;
+      pointer-events: none;
+      transition: opacity 0.15s;
+    }
+    .slot-am {
+      top: 0;
+      border-top-left-radius: 4px;
+      border-top-right-radius: 4px;
+    }
+    .slot-pm {
+      bottom: 0;
+      border-bottom-left-radius: 4px;
+      border-bottom-right-radius: 4px;
+    }
+    .leave-annual { background-color: #60a5fa !important; }
+    .leave-wb { background-color: #c084fc !important; }
+    .leave-birthday { background-color: #86efac !important; }
+    .leave-special { background-color: #cbd5e1 !important; }
+    
+    .day-number {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 10;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .custom-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
+
+    /* 總覽與滿版指示點：右上角微型小點 */
+    body.year-overview-mode .lock-badge,
+    body.zen-fullscreen-mode .lock-badge {
+      display: block !important;
+      font-size: 0 !important;
+      width: 3.5px !important;
+      height: 3.5px !important;
+      background-color: #f59e0b !important;
+      border-radius: 9999px !important;
+      top: 1.5px !important;
+      right: 1.5px !important;
+    }
+
+    /* 循環編輯暫存狀態樣式 */
+    .cell-pending-commit {
+      outline: 1.5px dashed #3b82f6 !important;
+      animation: pulse-border 1.2s infinite alternate ease-in-out;
+    }
+    @keyframes pulse-border {
+      0% { outline-color: #60a5fa; }
+      100% { outline-color: #2563eb; }
+    }
+
+    /* 年曆全覽與滿版純覽網格樣式 */
+    body.year-overview-mode,
+    body.zen-fullscreen-mode { 
+      padding: 0 !important; 
+      margin: 0 !important;
+      background-color: #fafbfc !important; 
+      display: block !important;
+      min-height: auto !important;
+      justify-content: flex-start !important;
+    }
+
+    body.year-overview-mode #appMainWrapper,
+    body.zen-fullscreen-mode #appMainWrapper {
+      margin: 0 auto !important;
+      padding: 0 !important;
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+
+    body.year-overview-mode #appMainWrapper > div:last-child,
+    body.zen-fullscreen-mode #appMainWrapper > div:last-child {
+      margin-top: 0 !important;
+      display: block !important;
+      width: 100% !important;
+    }
+
+    body.year-overview-mode #stickyHeaderArea,
+    body.year-overview-mode #syncBar,
+    body.year-overview-mode #rightSidePanel,
+    body.year-overview-mode footer,
+    body.year-overview-mode #btnScrollToTopFloating,
+    body.zen-fullscreen-mode #stickyHeaderArea,
+    body.zen-fullscreen-mode #syncBar,
+    body.zen-fullscreen-mode #rightSidePanel,
+    body.zen-fullscreen-mode footer,
+    body.zen-fullscreen-mode #btnScrollToTopFloating { 
+      display: none !important; 
+    }
+    
+    #yearViewControls { display: none; }
+    body.year-overview-mode:not(.zen-fullscreen-mode) #yearViewControls {
+      display: flex !important;
+      position: sticky;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 40;
+      background-color: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+      border-bottom: 1px solid #e2e8f0;
+      padding: 6px 8px;
+    }
+
+    body.year-overview-mode #calendarContainer,
+    body.zen-fullscreen-mode #calendarContainer {
+      display: grid !important;
+      grid-template-columns: repeat(3, 1fr) !important;
+      column-gap: 8px !important;
+      row-gap: 6px !important;
+      width: 100% !important;
+      padding: 6px 8px 30px 8px !important;
+    }
+
+    body.zen-fullscreen-mode #calendarContainer {
+      padding-top: 4px !important;
+      padding-bottom: 30px !important;
+    }
+
+    body.year-overview-mode .month-card,
+    body.zen-fullscreen-mode .month-card { 
+      padding: 0 !important; 
+      border-radius: 0 !important; 
+      border: none !important; 
+      box-shadow: none !important; 
+      background: transparent !important;
+    }
+    body.year-overview-mode .month-header-title,
+    body.zen-fullscreen-mode .month-header-title { 
+      border-bottom: none !important;
+      margin-bottom: 2px !important; 
+      padding: 0 1px !important; 
+    }
+    body.year-overview-mode .month-header-title span:first-child,
+    body.zen-fullscreen-mode .month-header-title span:first-child { 
+      font-size: 0.72rem !important; 
+      font-weight: 800 !important; 
+      color: #0f172a !important;
+    }
+    body.year-overview-mode .month-header-title span:nth-child(2),
+    body.year-overview-mode .month-header-title span:last-child,
+    body.zen-fullscreen-mode .month-header-title span:nth-child(2),
+    body.zen-fullscreen-mode .month-header-title span:last-child { 
+      display: none !important; 
+    }
+    body.year-overview-mode .weekdays-header,
+    body.zen-fullscreen-mode .weekdays-header { 
+      font-size: 7px !important; 
+      color: #94a3b8 !important;
+      margin-bottom: 2px !important; 
+      opacity: 0.7;
+    }
+    body.year-overview-mode .month-grid-days,
+    body.zen-fullscreen-mode .month-grid-days { 
+      gap: 1.5px !important; 
+    }
+    body.year-overview-mode .calendar-cell,
+    body.zen-fullscreen-mode .calendar-cell { 
+      height: 18px !important; 
+      border: none !important; 
+      background-color: rgba(241, 245, 249, 0.6) !important;
+      border-radius: 3px !important;
+      cursor: pointer;
+    }
+    
+    body.year-overview-mode .calendar-cell.bg-pink-50\/80,
+    body.year-overview-mode .calendar-cell.special-sunday-holiday,
+    body.zen-fullscreen-mode .calendar-cell.bg-pink-50\/80,
+    body.zen-fullscreen-mode .calendar-cell.special-sunday-holiday {
+      background-color: rgba(254, 226, 226, 0.45) !important;
+    }
+    
+    body.year-overview-mode .calendar-cell.bg-orange-50,
+    body.zen-fullscreen-mode .calendar-cell.bg-orange-50 {
+      background-color: rgba(255, 237, 213, 0.8) !important;
+    }
+    body.year-overview-mode .day-number,
+    body.zen-fullscreen-mode .day-number { 
+      font-size: 8px !important; 
+      font-weight: 600 !important; 
+    }
+
+    body.zen-fullscreen-mode #zenTopYear {
+      display: flex !important;
+    }
+
+    body.readonly-mode .calendar-cell {
+      cursor: default !important;
+    }
+
+    .locked-blur {
+      filter: blur(6px);
+      pointer-events: none;
+      user-select: none;
+    }
+  </style>
+</head>
+<body class="text-slate-800 antialiased p-2 md:p-6 min-h-screen flex flex-col justify-between readonly-mode">
+
+  <!-- 滿版模式頂部吸頂展示欄 (標題 + 右上角發送與退出按鈕，完全不遮擋底部年曆) -->
+  <div id="zenTopYear" class="hidden items-center justify-between py-1.5 px-3 mb-1 bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-40 shadow-2xs">
+    <div class="flex items-center gap-2">
+      <span class="text-xs sm:text-sm font-black tracking-wider text-slate-900">2027 香港假期管理</span>
+      <span class="text-[9px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded border border-slate-200 hidden sm:inline">全覽</span>
+    </div>
+    <div class="flex items-center gap-1.5">
+      <button id="btnShareZenImage" type="button" title="發送日曆" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full shadow-2xs text-[11px] font-bold flex items-center gap-1 transition active:scale-95">
+        <i class="fa-solid fa-share-nodes text-emerald-600"></i>
+        <span>發送</span>
+      </button>
+      <button id="btnExitZenCircle" type="button" title="退出滿版純覽" class="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-full shadow-2xs text-[11px] font-bold flex items-center gap-1 transition active:scale-95">
+        <i class="fa-solid fa-compress text-slate-500"></i>
+        <span>退出</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 年曆全覽模式頂部固定吸頂面板 -->
+  <div id="yearViewControls" class="flex flex-col gap-1.5 border-b border-slate-200">
+    <!-- 第 1 排：標題與基本視窗切換 -->
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-1.5 text-xs font-bold text-slate-800 truncate">
+        <i class="fa-solid fa-calendar-days text-indigo-600 shrink-0"></i>
+        <span class="truncate">2027 香港假期管理</span>
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button id="btnOverviewToggleLock" class="px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300">
+          <i class="fa-solid fa-lock text-slate-500"></i> 唯讀
+        </button>
+        <button id="btnEnterZenMode" title="切換為純日曆滿版" class="px-2 py-0.5 rounded text-[10px] font-bold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center gap-1 transition shadow-2xs">
+          <i class="fa-solid fa-expand text-slate-500"></i> 滿版
+        </button>
+        <button id="btnExitYearViewTop" class="px-2.5 py-0.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md text-[10px] font-bold flex items-center gap-1 active:scale-95 transition shadow-2xs">
+          <i class="fa-solid fa-compress text-slate-500"></i> 退出
+        </button>
+      </div>
+    </div>
+
+    <!-- 第 2 排：精簡功能鍵（假期助手、請假表、公眾假期、農曆節氣、匯出iCal、全部重設） -->
+    <div class="grid grid-cols-6 gap-1 text-[10px]">
+      <button id="btnOverviewAutoTrip" class="py-1 px-0.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 text-white rounded font-bold flex items-center justify-center gap-0.5 shadow-2xs active:scale-95 transition">
+        <i class="fa-solid fa-plane-departure text-[9px]"></i>
+        <span class="truncate">助手</span>
+      </button>
+      <button id="btnOverviewLeaves" class="py-1 px-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded font-semibold flex items-center justify-center gap-0.5 active:scale-95 transition">
+        <i class="fa-solid fa-list-check text-blue-600 text-[9px]"></i>
+        <span class="truncate">請假</span>
+      </button>
+      <button id="btnOverviewHolidays" class="py-1 px-0.5 bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 rounded font-semibold flex items-center justify-center gap-0.5 active:scale-95 transition">
+        <i class="fa-solid fa-calendar-days text-orange-500 text-[9px]"></i>
+        <span class="truncate">假期</span>
+      </button>
+      <button id="btnOverviewLunar" class="py-1 px-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded font-semibold flex items-center justify-center gap-0.5 active:scale-95 transition">
+        <i class="fa-solid fa-moon text-amber-600 text-[9px]"></i>
+        <span class="truncate">節氣</span>
+      </button>
+      <button id="btnOverviewExportIcal" class="py-1 px-0.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded font-medium flex items-center justify-center gap-0.5 active:scale-95 transition">
+        <i class="fa-solid fa-download text-slate-500 text-[9px]"></i>
+        <span class="truncate">iCal</span>
+      </button>
+      <button id="btnOverviewClearAll" class="py-1 px-0.5 bg-white hover:bg-red-50 text-red-600 border border-red-200 rounded font-medium flex items-center justify-center gap-0.5 active:scale-95 transition">
+        <i class="fa-solid fa-trash-can text-[9px]"></i>
+        <span class="truncate">重設</span>
+      </button>
+    </div>
+
+    <!-- 第 3 排：總覽筆刷控制條與配額統計 -->
+    <div class="flex items-center gap-1.5 py-0.5">
+      <div class="grid grid-cols-4 gap-1 text-[10px] flex-1 min-w-0">
+        <button type="button" data-brush="annual" class="brush-capsule px-1.5 py-1 rounded-md border flex items-center justify-between font-semibold transition active:scale-95 cursor-pointer">
+          <span class="flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-[#60a5fa]"></span>
+            <span>AL</span>
+          </span>
+          <span id="overviewAlStats" class="font-bold font-mono">14.0/0.0</span>
+        </button>
+
+        <button type="button" data-brush="wb" class="brush-capsule px-1.5 py-1 rounded-md border flex items-center justify-between font-semibold transition active:scale-95 cursor-pointer">
+          <span class="flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+            <span>WB</span>
+          </span>
+          <span id="overviewWbStats" class="font-bold font-mono">4.0/0.0</span>
+        </button>
+
+        <button type="button" data-brush="special" class="brush-capsule px-1.5 py-1 rounded-md border flex items-center justify-between font-semibold transition active:scale-95 cursor-pointer">
+          <span class="flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-slate-300"></span>
+            <span>S</span>
+          </span>
+          <span id="overviewSpecialStats" class="font-bold font-mono">0.0日</span>
+        </button>
+
+        <button type="button" data-brush="birthday" class="brush-capsule px-1.5 py-1 rounded-md border flex items-center justify-between font-semibold transition active:scale-95 cursor-pointer">
+          <span class="flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-[#86efac] border border-emerald-400"></span>
+            <span>BL</span>
+          </span>
+          <span id="overviewBdayStats" class="font-bold font-mono">0次</span>
+        </button>
+      </div>
+
+      <button type="button" data-brush="eraser" id="btnOverviewEraser" title="切換為清除筆刷" class="brush-btn px-2 py-1 bg-white hover:bg-red-50 border border-slate-300 text-slate-700 hover:text-red-600 rounded-md text-[10px] font-bold flex items-center gap-1 shrink-0 transition active:scale-95 cursor-pointer shadow-2xs">
+        <i class="fa-solid fa-eraser text-red-500 text-[10px]"></i>
+        <span>清除</span>
+      </button>
+    </div>
+  </div>
+
+
+
+  <!-- 全域浮動返回頂部按鈕 -->
+  <button id="btnScrollToTopFloating" class="fixed bottom-4 right-4 z-40 w-9 h-9 rounded-full bg-white/95 border border-slate-300 text-slate-700 shadow-md flex items-center justify-center text-sm hover:bg-slate-100 transition active:scale-90 opacity-0 pointer-events-none duration-200">
+    <i class="fa-solid fa-arrow-up"></i>
+  </button>
+
+  <div id="appMainWrapper" class="max-w-[1600px] mx-auto w-full transition-all duration-300">
+    
+    <div id="stickyHeaderArea" class="sticky top-0 z-30 bg-[#f8fafc]/95 backdrop-blur-md pt-1 pb-1 md:static md:bg-transparent md:pt-0 md:pb-0">
+      
+      <!-- 頂部標題 -->
+      <div id="topHeader" class="flex flex-row items-center justify-between pb-1.5 mb-1.5 border-b border-slate-200">
+        <div>
+          <h1 class="text-base md:text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-calendar-check text-blue-600"></i>
+            2027 香港假期管理
+          </h1>
+        </div>
+        <div class="flex items-center gap-2 text-xs text-slate-500">
+          <span id="desktopSyncIndicator" class="inline-flex items-center gap-1 text-[11px]">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span> 連線正常
+          </span>
+        </div>
+      </div>
+
+      <div class="bg-white p-1.5 md:p-0 rounded-xl md:rounded-none border md:border-none border-slate-200 shadow-2xs md:shadow-none mb-1.5 md:mb-2">
+        <div class="flex items-center justify-between gap-1.5">
+          
+          <div class="grid grid-cols-4 md:flex md:flex-wrap items-center gap-1 md:gap-1.5 flex-1 min-w-0">
+            <button id="btnAutoGenerateTrip" class="py-1 px-1 md:py-1.5 md:px-3 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 text-white rounded-lg shadow-2xs text-[10px] md:text-xs font-bold flex items-center justify-center gap-1 transition active:scale-95">
+              <i class="fa-solid fa-plane-departure text-[9px] md:text-[10px]"></i>
+              <span class="truncate">假期助手</span>
+            </button>
+            <button id="btnHeaderLeaves" class="py-1 px-1 md:py-1.5 md:px-3 bg-blue-50 border border-blue-200 rounded-lg text-[10px] md:text-xs font-semibold hover:bg-blue-100 text-blue-700 flex items-center justify-center gap-1 transition active:scale-95">
+              <i class="fa-solid fa-list-check text-blue-600 text-[9px] md:text-[10px]"></i>
+              <span class="truncate">請假表</span>
+            </button>
+            <button id="btnHeaderHolidays" class="py-1 px-1 md:py-1.5 md:px-3 bg-orange-50 border border-orange-200 rounded-lg text-[10px] md:text-xs font-semibold hover:bg-orange-100 text-orange-700 flex items-center justify-center gap-1 transition active:scale-95">
+              <i class="fa-solid fa-calendar-days text-orange-500 text-[9px] md:text-[10px]"></i>
+              <span class="truncate">公眾假期</span>
+            </button>
+            <button id="btnHeaderLunar" class="py-1 px-1 md:py-1.5 md:px-3 bg-amber-50 border border-amber-200 rounded-lg text-[10px] md:text-xs font-semibold hover:bg-amber-100 text-amber-800 flex items-center justify-center gap-1 transition active:scale-95">
+              <i class="fa-solid fa-moon text-amber-600 text-[9px] md:text-[10px]"></i>
+              <span class="truncate">農曆節氣</span>
+            </button>
+            <button id="btnToggleYearView" class="py-1 px-1 md:py-1.5 md:px-3 bg-indigo-50 border border-indigo-200 rounded-lg text-[10px] md:text-xs font-semibold hover:bg-indigo-100 text-indigo-700 flex items-center justify-center gap-1 transition active:scale-95">
+              <i class="fa-solid fa-mobile-screen text-indigo-600 text-[9px] md:text-[10px]"></i>
+              <span class="truncate">年曆全覽</span>
+            </button>
+            <button id="btnExportIcal" class="py-1 px-1 md:py-1.5 md:px-3 bg-white border border-slate-300 rounded-lg text-[10px] md:text-xs font-medium hover:bg-slate-50 text-slate-700 flex items-center justify-center gap-1 transition active:scale-95">
+              <i class="fa-solid fa-download text-slate-500 text-[9px] md:text-[10px]"></i>
+              <span class="truncate">匯出iCal</span>
+            </button>
+            <button id="btnClearAll" class="py-1 px-1 md:py-1.5 md:px-3 bg-white border border-red-200 rounded-lg text-[10px] md:text-xs font-medium hover:bg-red-50 text-red-600 flex items-center justify-center gap-1 transition active:scale-95">
+              <i class="fa-solid fa-trash-can text-[9px] md:text-[10px]"></i>
+              <span class="truncate">全部重設</span>
+            </button>
+          </div>
+
+          <div class="flex flex-col md:flex-row items-center gap-1 shrink-0 ml-1">
+            <button id="btnToggleGlobalLock" title="切換唯讀/編輯模式" 
+                    class="w-7 h-7 md:w-auto md:h-auto md:px-2.5 md:py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold rounded-lg text-xs flex items-center justify-center gap-1 transition shadow-2xs">
+              <i id="globalLockIcon" class="fa-solid fa-lock text-slate-500 text-xs"></i>
+              <span id="globalLockText" class="hidden md:inline">唯讀</span>
+            </button>
+            
+            <button id="btnOpenSyncModal" title="房間同步與設定" 
+                    class="w-7 h-7 bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 rounded-lg text-xs font-bold flex md:hidden items-center justify-center transition shadow-2xs">
+              <i class="fa-solid fa-cloud text-slate-500 text-xs"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="syncBar" class="hidden md:flex bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-2.5 mb-2.5 items-center justify-between text-xs">
+        <div class="flex items-center gap-2">
+          <span class="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs">
+            <i class="fa-solid fa-cloud"></i>
+          </span>
+          <span class="font-bold text-slate-800">跨裝置即時同步</span>
+          <span class="text-slate-500">（長按日子可個別加鎖 🔒）</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-slate-600 font-medium">房間代碼：</span>
+          <input type="text" id="desktopRoomInput" class="px-2 py-0.5 bg-white border border-blue-300 rounded font-mono font-bold text-blue-700 text-xs tracking-wider w-24 uppercase text-center focus:outline-blue-500" placeholder="請輸入房號">
+          <button id="btnDesktopSwitchRoom" class="px-2.5 py-0.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition">連接</button>
+          <button id="btnDesktopResetPin" class="px-2.5 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded transition text-[11px]">重設PIN</button>
+        </div>
+      </div>
+
+      <!-- KPI 假期統計卡 -->
+      <div id="dashboardKPI" class="flex items-stretch gap-1 md:gap-2.5">
+        
+        <div class="grid grid-cols-4 gap-1 md:gap-2.5 flex-1 min-w-0">
+          
+          <div data-brush="annual" class="brush-card bg-white p-1 md:p-2.5 rounded-lg md:rounded-xl border border-blue-200 shadow-2xs flex flex-col justify-between cursor-pointer transition-all select-none hover:border-blue-400">
+            <div>
+              <div class="flex items-center justify-between mb-0.5 md:mb-1">
+                <span class="text-[10px] md:text-xs font-bold text-blue-600 tracking-wider">
+                  <span class="inline md:hidden">AL</span>
+                  <span class="hidden md:inline">ANNUAL LEAVE</span>
+                </span>
+                <span id="brushBadge-annual" class="w-3.5 h-3.5 md:w-4 md:h-4 rounded-full flex items-center justify-center transition-all bg-[#60a5fa] text-[8px] md:text-[9px] text-white"></span>
+              </div>
+              <div class="flex flex-col md:flex-row md:items-baseline md:justify-between text-[9px] md:text-xs text-slate-500">
+                <span class="hidden md:inline">配額：</span>
+                <div class="flex items-center" onclick="event.stopPropagation()">
+                  <input type="number" id="annualQuotaInput" value="14" step="0.5" min="0" 
+                         class="w-7 md:w-12 px-0.5 md:px-1 py-0.5 border border-slate-300 rounded text-right font-bold text-slate-800 text-[10px] md:text-xs focus:outline-blue-500 bg-white">
+                  <span class="ml-0.5 md:ml-1">日</span>
+                </div>
+              </div>
+              <div class="text-[9px] md:text-xs text-slate-500 mt-0.5 flex justify-between">
+                <span class="hidden md:inline">已使用：</span>
+                <span id="annualUsedText" class="font-bold text-slate-700">0.0日</span>
+              </div>
+            </div>
+            <div class="mt-0.5 md:mt-1.5 pt-0.5 md:pt-1.5 border-t border-slate-100 flex items-center justify-between">
+              <span class="hidden md:inline text-xs font-semibold text-slate-600">剩餘：</span>
+              <span id="annualRemainText" class="text-[11px] md:text-base font-bold text-blue-600">14.0日</span>
+            </div>
+          </div>
+
+          <div data-brush="wb" class="brush-card bg-white p-1 md:p-2.5 rounded-lg md:rounded-xl border border-purple-200 shadow-2xs flex flex-col justify-between cursor-pointer transition-all select-none hover:border-purple-400">
+            <div>
+              <div class="flex items-center justify-between mb-0.5 md:mb-1">
+                <span class="text-[10px] md:text-xs font-bold text-purple-600 tracking-wider">
+                  <span class="inline md:hidden">WB</span>
+                  <span class="hidden md:inline">WELL-BEING</span>
+                </span>
+                <span id="brushBadge-wb" class="w-3.5 h-3.5 md:w-4 md:h-4 rounded-full flex items-center justify-center transition-all bg-purple-400 text-[8px] md:text-[9px] text-white"></span>
+              </div>
+              <div class="flex flex-col md:flex-row md:items-baseline md:justify-between text-[9px] md:text-xs text-slate-500">
+                <span class="hidden md:inline">配額：</span>
+                <div class="flex items-center" onclick="event.stopPropagation()">
+                  <input type="number" id="wbQuotaInput" value="4" step="1" min="0" 
+                         class="w-8 md:w-12 px-0.5 md:px-1 py-0.5 border border-slate-300 rounded text-right font-bold text-slate-800 text-[10px] md:text-xs focus:outline-purple-500 bg-white">
+                  <span class="ml-0.5 md:ml-1">次</span>
+                </div>
+              </div>
+              <div class="text-[9px] md:text-xs text-slate-500 mt-0.5 flex justify-between">
+                <span class="hidden md:inline">已使用：</span>
+                <span id="wbUsedText" class="font-bold text-slate-700">0.0次</span>
+              </div>
+            </div>
+            <div class="mt-0.5 md:mt-1.5 pt-0.5 md:pt-1.5 border-t border-slate-100 flex items-center justify-between">
+              <span class="hidden md:inline text-xs font-semibold text-slate-600">剩餘：</span>
+              <span id="wbRemainText" class="text-[11px] md:text-base font-bold text-purple-600">4.0次</span>
+            </div>
+          </div>
+
+          <div data-brush="special" class="brush-card bg-white p-1 md:p-2.5 rounded-lg md:rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between cursor-pointer transition-all select-none hover:border-slate-400">
+            <div>
+              <div class="flex items-center justify-between mb-0.5 md:mb-1">
+                <span class="text-[10px] md:text-xs font-bold text-slate-600 tracking-wider">
+                  <span class="inline md:hidden">S</span>
+                  <span class="hidden md:inline">SPECIAL LEAVE</span>
+                </span>
+                <span id="brushBadge-special" class="w-3.5 h-3.5 md:w-4 md:h-4 rounded-full flex items-center justify-center transition-all bg-slate-300 text-[8px] md:text-[9px] text-white"></span>
+              </div>
+              <div class="text-[9px] md:text-[11px] text-slate-400 mt-0.5 truncate">特別假期</div>
+              <div class="text-[9px] md:text-[11px] text-slate-400">累積計數</div>
+            </div>
+            <div class="mt-0.5 md:mt-1.5 pt-0.5 md:pt-1.5 border-t border-slate-100 flex items-center justify-between">
+              <span class="hidden md:inline text-xs font-semibold text-slate-600">已用：</span>
+              <span id="specialUsedText" class="text-[11px] md:text-base font-bold text-slate-700">0.0日</span>
+            </div>
+          </div>
+
+          <div data-brush="birthday" class="brush-card bg-white p-1 md:p-2.5 rounded-lg md:rounded-xl border border-emerald-200 shadow-2xs flex flex-col justify-between cursor-pointer transition-all select-none hover:border-emerald-400">
+            <div>
+              <div class="flex items-center justify-between mb-0.5 md:mb-1">
+                <span class="text-[10px] md:text-xs font-bold text-emerald-600 tracking-wider">
+                  <span class="inline md:hidden">BL</span>
+                  <span class="hidden md:inline">BIRTHDAY LEAVE</span>
+                </span>
+                <span id="brushBadge-birthday" class="w-3.5 h-3.5 md:w-4 md:h-4 rounded-full flex items-center justify-center transition-all bg-[#86efac] border border-emerald-400 text-[8px] md:text-[9px] text-emerald-800"></span>
+              </div>
+              <div class="text-[9px] md:text-[11px] text-slate-500 mt-0.5 truncate">
+                <span id="bdayDateText" class="font-bold text-slate-700 truncate block">未登記</span>
+              </div>
+            </div>
+            <div class="mt-0.5 md:mt-1.5 pt-0.5 md:pt-1.5 border-t border-slate-100 flex items-center justify-between">
+              <span class="hidden md:inline text-xs font-semibold text-slate-600">已用：</span>
+              <span id="bdayUsedText" class="text-[11px] md:text-base font-bold text-slate-700">0次</span>
+            </div>
+          </div>
+
+        </div>
+
+        <button type="button" data-brush="eraser" id="btnBrushEraser" title="切換為清除筆刷" class="brush-btn shrink-0 w-10 md:w-16 bg-white hover:bg-red-50 border border-slate-200 text-slate-500 hover:text-red-600 rounded-lg md:rounded-xl shadow-2xs flex flex-col items-center justify-center gap-0.5 md:gap-1 transition cursor-pointer select-none">
+          <div class="w-5 h-5 md:w-7 md:h-7 rounded-full flex items-center justify-center bg-red-50 text-red-500">
+            <i class="fa-solid fa-eraser text-[10px] md:text-xs"></i>
+          </div>
+          <span class="text-[9px] md:text-[11px] font-bold">清除</span>
+        </button>
+
+      </div>
+
+    </div>
+
+    <!-- Main Content -->
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-3 md:gap-5 mt-1 md:mt-0">
+      <div class="xl:col-span-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 md:gap-4" id="calendarContainer"></div>
+
+      <div id="rightSidePanel" class="xl:col-span-4 flex flex-col gap-4 mt-2 xl:mt-0">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-xs flex flex-col h-[520px] md:h-[650px] overflow-hidden">
+          
+          <div class="p-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-1">
+            <div class="flex flex-wrap items-center gap-1">
+              <button id="tabBtnLeaves" type="button" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white text-blue-700 shadow-xs border border-slate-200 flex items-center gap-1 transition">
+                <i class="fa-solid fa-list-check text-blue-600"></i>
+                請假表 (<span id="recordCount">0</span>)
+              </button>
+              <button id="tabBtnHolidays" type="button" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-orange-700 hover:bg-orange-50/60 flex items-center gap-1 transition">
+                <i class="fa-solid fa-calendar-days text-orange-500"></i>
+                公眾假期
+              </button>
+              <button id="tabBtnLunar" type="button" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-amber-700 hover:bg-amber-50/60 flex items-center gap-1 transition">
+                <i class="fa-solid fa-moon text-amber-500"></i>
+                農曆節氣
+              </button>
+            </div>
+            
+            <button id="btnPanelScrollTop" title="回到頁面頂部" class="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-semibold flex items-center gap-1 shadow-2xs transition active:scale-95">
+              <i class="fa-solid fa-arrow-up text-blue-600 text-[10px]"></i> 回頂
+            </button>
+          </div>
+
+          <div id="tabContentLeaves" class="flex-1 overflow-y-auto custom-scroll p-2">
+            <table class="w-full text-xs text-left">
+              <thead class="text-[10px] uppercase bg-slate-100 text-slate-600 sticky top-0 z-10">
+                <tr>
+                  <th class="py-1.5 px-2 rounded-l">日期</th>
+                  <th class="py-1.5 px-1 text-center">時段</th>
+                  <th class="py-1.5 px-1">假別</th>
+                  <th class="py-1.5 px-2">備註</th>
+                  <th class="py-1.5 px-1 text-right rounded-r">操作</th>
+                </tr>
+              </thead>
+              <tbody id="leaveTableBody" class="divide-y divide-slate-100"></tbody>
+            </table>
+            
+            <div id="emptyLeaveNotice" class="text-center py-16 text-slate-400">
+              <i class="fa-regular fa-calendar-xmark text-2xl mb-1.5 text-slate-300"></i>
+              <p class="text-xs">尚無任何請假紀錄</p>
+            </div>
+          </div>
+
+          <div id="tabContentHolidays" class="flex-1 overflow-y-auto custom-scroll p-2.5 hidden">
+            <div class="mb-2 p-1.5 bg-orange-50/80 rounded-lg border border-orange-200 text-[11px] text-orange-800 flex items-center justify-between">
+              <span class="font-medium"><i class="fa-solid fa-circle-info text-orange-600 mr-1"></i> 2027年香港法定及公眾假期</span>
+              <span class="text-[10px] text-orange-600 font-bold bg-white px-1.5 py-0.5 rounded border border-orange-200">全港通用</span>
+            </div>
+            
+            <table class="w-full text-xs text-left">
+              <thead class="text-[10px] uppercase bg-slate-100 text-slate-600 sticky top-0 z-10">
+                <tr>
+                  <th class="py-1.5 px-2 rounded-l">日期</th>
+                  <th class="py-1.5 px-1">星期</th>
+                  <th class="py-1.5 px-1">假期名稱</th>
+                  <th class="py-1.5 px-2 text-right rounded-r">性質</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr class="hover:bg-orange-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800">1月1日</td><td class="py-2 px-1 text-slate-500">五</td><td class="py-2 px-1 font-bold text-orange-700">元旦</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-[10px] font-medium">法定 / 公眾</span></td></tr>
+                <tr class="hover:bg-orange-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800">2月6日</td><td class="py-2 px-1 text-slate-500">六</td><td class="py-2 px-1 font-bold text-orange-700">農曆年初一</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-[10px] font-medium">法定 / 公眾</span></td></tr>
+                <tr class="hover:bg-pink-50 transition"><td class="py-2 px-2 font-semibold text-pink-600">2月7日</td><td class="py-2 px-1 text-pink-500">日</td><td class="py-2 px-1 font-bold text-pink-700">農曆年初二</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-pink-100 text-pink-700 rounded text-[10px] font-medium">適逢星期日（以初四補假）</span></td></tr>
+                <tr class="hover:bg-orange-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800">2月8日</td><td class="py-2 px-1 text-slate-500">一</td><td class="py-2 px-1 font-bold text-orange-700">農曆年初三</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-[10px] font-medium">法定 / 公眾</span></td></tr>
+                <tr class="hover:bg-orange-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800">2月9日</td><td class="py-2 px-1 text-slate-500">二</td><td class="py-2 px-1 font-bold text-orange-700">農曆年初四 (補假)</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">年初二補假</span></td></tr>
+                <tr class="hover:bg-orange-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800">3月26日</td><td class="py-2 px-1 text-slate-500">五</td><td class="py-2 px-1 font-bold text-orange-700">耶穌受難節</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-[10px] font-medium">公眾假期</span></td></tr>
+                <tr class="hover:bg-orange-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800">3月27日</td><td class="py-2 px-1 text-slate-500">六</td><td class="py-2 px-1 font-bold text-orange-700">耶穌受難節翌日</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-[10px] font-medium">公眾假期</span></td></tr>
+                <tr class="hover:bg-orange-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800">3月29日</td><td class="py-2 px-1 text-slate-500">一</td><td class="py-2 px-2 font-bold text-orange-700">復活節星期一</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-[10px] font-medium">法定 / 公眾</span></td></tr>
+                <tr class="hover:bg-pink-50 transition"><td class="py-2 px-2 font-semibold text-pink-600">4月4日</td><td class="py-2 px-1 text-pink-500">日</td><td class="py-2 px-1 font-bold text-pink-700">清明節</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-pink-100 text-pink-700 rounded text-[10px] font-medium">適逢星期日（以翌日補假）</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">4月5日</td><td class="py-2 px-1 text-slate-500">一</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">二月廿九</td><td class="py-2 px-2 font-bold text-orange-700 whitespace-nowrap">清明節翌日 (補假)</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">清明補假</span></td></tr>
+                <tr class="hover:bg-orange-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800">5月1日</td><td class="py-2 px-1 text-slate-500">六</td><td class="py-2 px-1 font-bold text-orange-700">勞動節</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-[10px] font-medium">法定 / 公眾</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">5月13日</td><td class="py-2 px-1 text-slate-500">四</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">四月初八</td><td class="py-2 px-2 font-bold text-orange-700 whitespace-nowrap">佛誕</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-[10px] font-medium">法定 / 公眾</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">6月9日</td><td class="py-2 px-1 text-slate-500">三</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">五月初五</td><td class="py-2 px-2 font-bold text-red-700 whitespace-nowrap">端午節</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[10px] font-medium">法定 / 公眾</span></td></tr>
+                <tr class="hover:bg-orange-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800">7月1日</td><td class="py-2 px-1 text-slate-500">四</td><td class="py-2 px-2 font-bold text-orange-700">特區成立紀念日</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-[10px] font-medium">法定 / 公眾</span></td></tr>
+                <tr class="hover:bg-orange-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800">9月16日</td><td class="py-2 px-1 text-slate-500">四</td><td class="py-2 px-2 font-bold text-red-700">中秋節翌日</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-[10px] font-medium">法定 / 公眾</span></td></tr>
+                <tr class="hover:bg-orange-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800">10月1日</td><td class="py-2 px-1 text-slate-500">五</td><td class="py-2 px-2 font-bold text-orange-700">國慶日</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-[10px] font-medium">法定 / 公眾</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">10月8日</td><td class="py-2 px-1 text-slate-500">五</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">九月初九</td><td class="py-2 px-2 font-bold text-orange-700 whitespace-nowrap">重陽節</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-[10px] font-medium">法定 / 公眾</span></td></tr>
+                <tr class="hover:bg-orange-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800">12月25日</td><td class="py-2 px-1 text-slate-500">六</td><td class="py-2 px-2 font-bold text-orange-700">聖誕節</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-[10px] font-medium">法定 / 公眾</span></td></tr>
+                <tr class="hover:bg-pink-50 transition"><td class="py-2 px-2 font-semibold text-pink-600">12月26日</td><td class="py-2 px-1 text-pink-500">日</td><td class="py-2 px-1 font-bold text-pink-700">節禮日 (Boxing Day)</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-pink-100 text-pink-700 rounded text-[10px] font-medium">適逢星期日（以翌日補假）</span></td></tr>
+                <tr class="hover:bg-orange-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800">12月27日</td><td class="py-2 px-1 text-slate-500">一</td><td class="py-2 px-2 font-bold text-orange-700">聖誕節翌日補假</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">公眾假期補假</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div id="tabContentLunar" class="flex-1 overflow-y-auto custom-scroll p-2.5 hidden">
+            <div class="mb-2 p-1.5 bg-amber-50/80 rounded-lg border border-amber-200 text-[11px] text-amber-900 flex items-center justify-between">
+              <span class="font-medium"><i class="fa-solid fa-moon text-amber-600 mr-1"></i> 2027 丁未羊年（農曆歲次、廿四節氣及傳統節日）</span>
+              <span class="text-[10px] text-amber-700 font-bold bg-white px-1.5 py-0.5 rounded border border-amber-200">羊年對照</span>
+            </div>
+            
+            <table class="w-full text-xs text-left">
+              <thead class="text-[10px] uppercase bg-slate-100 text-slate-600 sticky top-0 z-10">
+                <tr>
+                  <th class="py-1.5 px-2 rounded-l">公曆</th>
+                  <th class="py-1.5 px-1">週</th>
+                  <th class="py-1.5 px-2">農曆日期</th>
+                  <th class="py-1.5 px-2">節氣 / 傳統節日</th>
+                  <th class="py-1.5 px-2 text-right rounded-r">性質</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">1月5日</td><td class="py-2 px-1 text-slate-500">二</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">丙午年 十一月廿八</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">小寒</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">1月15日</td><td class="py-2 px-1 text-slate-500">五</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">臘月初八</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">臘八節</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">傳統節日</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">1月20日</td><td class="py-2 px-1 text-slate-500">三</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">臘月十三</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">大寒</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">1月31日</td><td class="py-2 px-1 text-slate-500">日</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">臘月廿四</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">送神 / 謝灶</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">民間習俗</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">2月4日</td><td class="py-2 px-1 text-slate-500">四</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">臘月廿八</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">立春 (09:46)</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣 (換年柱)</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">2月5日</td><td class="py-2 px-1 text-slate-500">五</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">臘月廿九</td><td class="py-2 px-2 font-bold text-purple-900 whitespace-nowrap">除夕 / 年三十晚</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">狂歡傳統節日</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">2月6日</td><td class="py-2 px-1 text-slate-500">六</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">丁未羊年 正月初一</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">春節 (農曆年初一)</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[10px] font-medium">法定及傳統大節</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">2月7日</td><td class="py-2 px-1 text-slate-500">日</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">正月初二</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">開年 / 車公誕</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">民間習俗</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">2月8日</td><td class="py-2 px-1 text-slate-500">一</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">正月初三</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">赤口 (農曆年初三)</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">狂歡傳統節日</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">2月12日</td><td class="py-2 px-1 text-slate-500">五</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">正月初七</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">人日 (初七慶生)</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">民間習俗</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">2月19日</td><td class="py-2 px-1 text-slate-500">五</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">正月十四</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">雨水</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">2月20日</td><td class="py-2 px-1 text-slate-500">六</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">正月十五</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">元宵節 / 上元節</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">傳統節日</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">3月6日</td><td class="py-2 px-1 text-slate-500">六</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">正月廿九</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">驚蟄</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣 (打小人)</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">3月9日</td><td class="py-2 px-1 text-slate-500">二</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">二月初二</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">龍抬頭 / 頭牙</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">傳統節日</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">3月21日</td><td class="py-2 px-1 text-slate-500">日</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">二月十四</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">春分</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">4月5日</td><td class="py-2 px-1 text-slate-500">一</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">二月廿九</td><td class="py-2 px-2 font-bold text-orange-700 whitespace-nowrap">清明節翌日 (補假)</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">清明補假</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">4月20日</td><td class="py-2 px-1 text-slate-500">二</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">三月十四</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">穀雨</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">4月28日</td><td class="py-2 px-1 text-slate-500">三</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">三月廿三</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">天后誕</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">香港傳統盛事</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">5月6日</td><td class="py-2 px-1 text-slate-500">四</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">四月初一</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">立夏</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">5月13日</td><td class="py-2 px-1 text-slate-500">四</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">四月初八</td><td class="py-2 px-2 font-bold text-orange-700 whitespace-nowrap">佛誕</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-[10px] font-medium">法定 / 公眾</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">5月21日</td><td class="py-2 px-1 text-slate-500">五</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">四月十六</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">小滿</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">6月9日</td><td class="py-2 px-1 text-slate-500">三</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">五月初五</td><td class="py-2 px-2 font-bold text-red-700 whitespace-nowrap">端午節</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[10px] font-medium">法定 / 公眾</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">6月21日</td><td class="py-2 px-1 text-slate-500">一</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">五月十七</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">夏至</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣 (日最長)</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">7月7日</td><td class="py-2 px-1 text-slate-500">三</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">六月初四</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">小暑</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">7月23日</td><td class="py-2 px-1 text-slate-500">五</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">六月二十</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">大暑</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">7月27日</td><td class="py-2 px-1 text-slate-500">二</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">六月廿四</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">關帝誕</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">民間信仰</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">8月7日</td><td class="py-2 px-1 text-slate-500">六</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">七月初六</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">立秋</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">8月8日</td><td class="py-2 px-1 text-slate-500">日</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">七月初七</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">七夕節 / 乞巧節</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">傳統節日</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">8月16日</td><td class="py-2 px-1 text-slate-500">一</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">七月十五</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">中元節 / 盂蘭盆節</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">狂歡傳統節日</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">8月23日</td><td class="py-2 px-1 text-slate-500">一</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">七月廿二</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">處暑</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">9月8日</td><td class="py-2 px-1 text-slate-500">三</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">八月初八</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">白露</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">9月15日</td><td class="py-2 px-1 text-slate-500">三</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">八月十四</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">迎月</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">民間習俗</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">9月16日</td><td class="py-2 px-1 text-slate-500">四</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">八月十六</td><td class="py-2 px-2 font-bold text-red-700 whitespace-nowrap">中秋節 (翌日公眾假)</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[10px] font-medium">傳統大節</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">9月17日</td><td class="py-2 px-1 text-slate-500">五</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">八月十六</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">追月</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">民間習俗</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">9月23日</td><td class="py-2 px-1 text-slate-500">四</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">八月廿二</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">秋分</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">10月8日</td><td class="py-2 px-1 text-slate-500">五</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">九月初九</td><td class="py-2 px-2 font-bold text-orange-700 whitespace-nowrap">重陽節</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-[10px] font-medium">法定 / 公眾</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">10月23日</td><td class="py-2 px-1 text-slate-500">六</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">九月廿四</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">霜降</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">11月7日</td><td class="py-2 px-1 text-slate-500">日</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">十月初九</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">立冬</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">11月13日</td><td class="py-2 px-1 text-slate-500">六</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">十月十五</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">下元節 / 水官誕</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-[10px] font-medium">傳統節日</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">11月22日</td><td class="py-2 px-1 text-slate-500">一</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">十月廿四</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">小雪</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">12月7日</td><td class="py-2 px-1 text-slate-500">二</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">十一月初九</td><td class="py-2 px-2 font-bold text-amber-900 whitespace-nowrap">大雪</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-medium">節氣</span></td></tr>
+                <tr class="hover:bg-amber-50/40 transition"><td class="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">12月22日</td><td class="py-2 px-1 text-slate-500">三</td><td class="py-2 px-2 font-medium text-slate-700 whitespace-nowrap">十一月廿五</td><td class="py-2 px-2 font-bold text-red-700 whitespace-nowrap">冬至</td><td class="py-2 px-2 text-right"><span class="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[10px] font-medium">傳統大節 (冬大過年)</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="text-center py-4 text-xs text-slate-400 mt-4 border-t border-slate-200">
+    2027 香港假期管理
+  </footer>
+
+  <!-- 自訂重設確認彈窗 -->
+  <div id="modalResetConfirm" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm hidden p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div id="resetModalHeader" class="p-4 border-b border-slate-100 flex items-center gap-3 bg-amber-50">
+        <span id="resetModalIcon" class="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg shadow-xs shrink-0">
+          <i class="fa-solid fa-shield-halved"></i>
+        </span>
+        <div class="flex-1">
+          <h3 id="resetModalTitle" class="font-bold text-slate-900 text-base">重設假期確認</h3>
+          <p id="resetModalSubtitle" class="text-[11px] text-slate-500">請選取適當的假期清除方案</p>
+        </div>
+        <button id="btnCloseResetModal" class="text-slate-400 hover:text-slate-700 text-base p-1">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="p-4 space-y-3.5 text-xs">
+        <div id="resetStatsContainer" class="grid grid-cols-2 gap-2 text-center">
+          <div class="p-2 rounded-xl bg-amber-50/70 border border-amber-200">
+            <span class="block text-[11px] text-amber-700 font-semibold mb-0.5">🔒 已鎖定保護</span>
+            <span id="resetCountLocked" class="text-base font-bold text-amber-900">0 日</span>
+          </div>
+          <div class="p-2 rounded-xl bg-blue-50/70 border border-blue-200">
+            <span class="block text-[11px] text-blue-700 font-semibold mb-0.5">📝 未鎖定假期</span>
+            <span id="resetCountUnlocked" class="text-base font-bold text-blue-900">0 日</span>
+          </div>
+        </div>
+
+        <p id="resetModalDesc" class="text-slate-600 leading-relaxed text-center"></p>
+
+        <div class="flex flex-col gap-2 pt-1">
+          <button id="btnConfirmSafeReset" type="button" class="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs transition flex items-center justify-center gap-2 active:scale-98">
+            <i class="fa-solid fa-shield-heart"></i>
+            <span>安全重設（僅清除未鎖定假期，保留鎖定）</span>
+          </button>
+
+          <button id="btnConfirmForceReset" type="button" class="w-full py-2.5 px-3 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold rounded-xl transition flex items-center justify-center gap-2 active:scale-98">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span>強制清除全部（包括已鎖定的所有假期）</span>
+          </button>
+
+          <button id="btnCancelResetAction" type="button" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-xl transition mt-0.5">
+            放棄操作，維持原狀
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 匯出 iCal 確認彈窗 -->
+  <div id="modalExportIcal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm hidden p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-sm w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div class="p-4 border-b border-slate-100 flex items-center gap-3 bg-blue-50">
+        <span class="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center text-base shadow-xs shrink-0">
+          <i class="fa-solid fa-download"></i>
+        </span>
+        <div class="flex-1">
+          <h3 class="font-bold text-slate-900 text-sm">匯出行事曆 (.ics)</h3>
+          <p class="text-[11px] text-slate-500">匯入至 Apple Calendar / Google 日曆</p>
+        </div>
+        <button id="btnCloseExportModal" class="text-slate-400 hover:text-slate-700 text-base p-1">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="p-4 space-y-3 text-xs">
+        <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+          <div class="flex justify-between items-center">
+            <span class="text-slate-500">房間代碼：</span>
+            <span id="exportRoomLabel" class="font-mono font-bold text-blue-700">---</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-500">已登記假期筆數：</span>
+            <span id="exportCountLabel" class="font-bold text-slate-800">0 筆</span>
+          </div>
+        </div>
+
+        <p class="text-slate-500 leading-normal text-center">
+          匯出的日曆檔將包含你所登記的 AL、WB、S 與 BL 假期，並以全日或半日事件呈現。
+        </p>
+
+        <div class="flex flex-col gap-1.5 pt-1">
+          <button id="btnConfirmExportIcal" type="button" class="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 active:scale-98">
+            <i class="fa-solid fa-file-arrow-down"></i> 下載 iCal 檔案
+          </button>
+          <button id="btnCancelExportModal" type="button" class="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium rounded-xl transition">
+            取消
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主管重設 PIN 碼彈窗 -->
+  <div id="modalResetPinAdmin" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm hidden p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-sm w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div class="p-4 border-b border-slate-100 flex items-center gap-3 bg-amber-50">
+        <span class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center text-base shadow-xs shrink-0">
+          <i class="fa-solid fa-key"></i>
+        </span>
+        <div class="flex-1">
+          <h3 class="font-bold text-slate-900 text-sm">主管授權 · 重設房間 PIN 碼</h3>
+          <p class="text-[11px] text-slate-500">清除密碼保護並還原至初始狀態</p>
+        </div>
+        <button id="btnCloseResetPinModal" class="text-slate-400 hover:text-slate-700 text-base p-1">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="p-4 space-y-3 text-xs">
+        <div class="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200 text-amber-900 leading-relaxed text-[11px]">
+          ⚠️ 重設後，此房間（<b id="resetPinRoomLabel">---</b>）的 PIN 碼將被抹除，任何成員可重新設定新 PIN 碼。
+        </div>
+
+        <div>
+          <label class="block text-slate-600 font-medium mb-1">請輸入主管安全管理金鑰：</label>
+          <input type="password" id="inputAdminKey" placeholder="請輸入管理密鑰" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-center tracking-widest font-mono font-bold focus:outline-blue-500 bg-slate-50">
+        </div>
+        
+        <div id="adminKeyErrorMsg" class="text-red-500 text-[11px] font-semibold hidden text-center"></div>
+
+        <div class="flex flex-col gap-1.5 pt-1">
+          <button id="btnConfirmResetPinAdmin" type="button" class="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 active:scale-98">
+            <i class="fa-solid fa-unlock-keyhole"></i> 驗證金鑰並清除 PIN 碼
+          </button>
+          <button id="btnCancelResetPinModal" type="button" class="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium rounded-xl transition">
+            取消
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 手機專屬：房間同步與連線抽屜彈窗 -->
+  <div id="modalMobileSync" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs hidden p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xs w-full overflow-hidden p-4 text-xs space-y-3">
+      <div class="flex items-center justify-between border-b pb-2">
+        <span class="font-bold text-slate-900 flex items-center gap-1.5"><i class="fa-solid fa-cloud text-blue-600"></i> 房間同步設定</span>
+        <button id="btnCloseMobileSync" class="text-slate-400 hover:text-slate-700"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div>
+        <label class="block text-slate-500 mb-1">房間代碼：</label>
+        <input type="text" id="mobileRoomInput" class="w-full px-2.5 py-1.5 border border-blue-300 rounded-lg font-mono font-bold text-center text-blue-700 uppercase" placeholder="請輸入房號">
+      </div>
+      <div class="flex gap-2">
+        <button id="btnMobileSwitchRoom" class="flex-1 py-1.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">切換房間</button>
+        <button id="btnMobileResetPin" class="px-2.5 py-1.5 bg-slate-100 text-slate-600 font-semibold rounded-lg hover:bg-slate-200 transition">重設PIN</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 首次啟用設定 PIN 碼 -->
+  <div id="modalActivationPin" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm hidden p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div class="p-4 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50 flex items-center gap-3">
+        <span class="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center text-base shadow-sm">
+          <i class="fa-solid fa-shield-halved"></i>
+        </span>
+        <div>
+          <h3 class="font-bold text-slate-900 text-sm">首次啟用 · 專屬房間認領</h3>
+          <p class="text-[11px] text-slate-500">房間代號：<span id="actRoomLabel" class="font-mono font-bold text-blue-600">---</span></p>
+        </div>
+      </div>
+      <div class="p-4 space-y-3 text-xs">
+        <p class="text-slate-600 leading-relaxed">
+          歡迎使用！請設定 <b class="text-blue-600">4 至 6 位數 PIN 碼</b>。設定完成後本裝置將自動記住驗證狀態。
+        </p>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">輸入新 PIN 碼 (4-6 位數字)</label>
+          <input type="password" id="actPinInput" maxlength="6" inputmode="numeric" placeholder="例如：8888" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-center tracking-widest text-base font-mono font-bold focus:outline-blue-500 bg-slate-50">
+        </div>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">再次確認新 PIN 碼</label>
+          <input type="password" id="actPinConfirmInput" maxlength="6" inputmode="numeric" placeholder="請再次輸入" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-center tracking-widest text-base font-mono font-bold focus:outline-blue-500 bg-slate-50">
+        </div>
+        <div id="actErrorMsg" class="text-red-500 text-[11px] font-semibold hidden"></div>
+        <button id="btnConfirmActivation" type="button" class="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow transition text-xs flex items-center justify-center gap-1.5 active:scale-98">
+          <i class="fa-solid fa-lock"></i> 確認啟用並登入
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 解鎖 PIN 碼 -->
+  <div id="modalUnlockPin" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/75 backdrop-blur-md hidden p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-sm w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div class="p-4 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
+        <span class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center text-base shadow-sm">
+          <i class="fa-solid fa-lock"></i>
+        </span>
+        <div>
+          <h3 class="font-bold text-slate-900 text-sm">解鎖房間日曆</h3>
+          <p class="text-[11px] text-slate-500">房間代號：<span id="unlockRoomLabel" class="font-mono font-bold text-blue-600">---</span></p>
+        </div>
+      </div>
+      <div class="p-4 space-y-3 text-xs">
+        <p class="text-slate-600">此房間受 PIN 碼保護。請輸入密碼以解鎖存取：</p>
+        <div>
+          <input type="password" id="unlockPinInput" maxlength="6" inputmode="numeric" placeholder="請輸入 4-6 位 PIN 碼" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-center tracking-widest text-lg font-mono font-bold focus:outline-blue-500 bg-slate-50">
+        </div>
+        <div id="unlockErrorMsg" class="text-red-500 text-[11px] font-semibold min-h-[16px]"></div>
+        <button id="btnSubmitUnlock" type="button" class="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow transition text-xs flex items-center justify-center gap-1.5 active:scale-98">
+          <i class="fa-solid fa-key"></i> 解鎖存取
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 假期助手模式選擇彈窗 -->
+  <div id="modalTravelMode" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs hidden p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-sky-50 to-indigo-50">
+        <div class="flex items-center gap-2">
+          <span class="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs shadow-xs">
+            <i class="fa-solid fa-plane-departure"></i>
+          </span>
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm">假期助手 · 選擇拼假方案</h3>
+            <p class="text-[10px] text-slate-500">2027 智能連假運算</p>
+          </div>
+        </div>
+        <button id="btnCloseTravelModal" class="text-slate-400 hover:text-slate-700 text-base p-1">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="p-3.5 flex flex-col gap-2">
+        <button id="btnModeMaxAL" type="button" class="group text-left p-3 rounded-xl border-2 border-blue-200 hover:border-blue-500 bg-blue-50/40 hover:bg-blue-50 transition flex items-start gap-2.5 focus:outline-none">
+          <div class="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center text-sm shrink-0 group-hover:scale-105 transition shadow-xs mt-0.5">
+            <i class="fa-solid fa-plane-departure"></i>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center justify-between mb-0.5">
+              <span class="font-bold text-xs text-slate-900">全額連假方案</span>
+              <span class="text-[9px] font-bold px-1.5 py-0.5 bg-blue-600 text-white rounded">100% 耗盡</span>
+            </div>
+            <p class="text-[11px] text-slate-600 font-medium mb-1">長假優先，善用所有年假資源</p>
+            <p class="text-[10.5px] text-slate-500 leading-normal">
+              優先鎖定 9 至 11 日的跨週高回報黃金長假，並將剩餘年假精確規劃完畢。適合長途旅行、出國深造探訪或需要完整長休的大型休假計畫。
+            </p>
+          </div>
+        </button>
+
+        <button id="btnModeCasualAL" type="button" class="group text-left p-3 rounded-xl border-2 border-emerald-200 hover:border-emerald-500 bg-emerald-50/30 hover:bg-emerald-50 transition flex items-start gap-2.5 focus:outline-none">
+          <div class="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-sm shrink-0 group-hover:scale-105 transition shadow-xs mt-0.5">
+            <i class="fa-solid fa-mug-saucer"></i>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center justify-between mb-0.5">
+              <span class="font-bold text-xs text-slate-900">靈活連假方案</span>
+              <span class="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded">60% - 80% AL</span>
+            </div>
+            <p class="text-[11px] text-emerald-700 font-medium mb-1">以量為先，多次短休與適度保留</p>
+            <p class="text-[10.5px] text-slate-500 leading-normal">
+              涵蓋 3 日或以上假期，以多次放鬆為目標（規劃 3 至 4 個假期，上限 8 個）。讓假期均勻分佈在全年中短途休閒，同時為年底或突發事宜保留兩至四成年假餘額。
+            </p>
+          </div>
+        </button>
+
+        <button id="btnModeMinimalAL" type="button" class="group text-left p-3 rounded-xl border-2 border-amber-200 hover:border-amber-500 bg-amber-50/30 hover:bg-amber-50 transition flex items-start gap-2.5 focus:outline-none">
+          <div class="w-8 h-8 rounded-lg bg-amber-600 text-white flex items-center justify-center text-sm shrink-0 group-hover:scale-105 transition shadow-xs mt-0.5">
+            <i class="fa-solid fa-feather"></i>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center justify-between mb-0.5">
+              <span class="font-bold text-xs text-slate-900">輕量連假方案</span>
+              <span class="text-[9px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded">40% - 60% AL</span>
+            </div>
+            <p class="text-[11px] text-amber-700 font-medium mb-1">週末微休，低年假消耗無負擔</p>
+            <p class="text-[10.5px] text-slate-500 leading-normal">
+              不設 4 天門檻，側重於配合週五或週一請 1 天假拼湊 3 天週末快閃。主打輕鬆充電、不影響正常工作進度，並保留充裕的年假儲備。
+            </p>
+          </div>
+        </button>
+      </div>
+
+      <div class="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
+        <span>套用時自動保留受鎖定（🔒）之假期</span>
+        <button id="btnCancelTravelModal" class="px-2.5 py-1 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-100 font-medium transition">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 現代風格 答案彈窗 (方案A/B/C快速切換 + 假期列表 + 年曆固定尺寸即時熱力預覽) -->
+  <div id="modalFlightBoard" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-md hidden p-2 sm:p-4">
+    <div class="bg-slate-50 rounded-3xl shadow-2xl border border-slate-200 max-w-xl lg:max-w-4xl w-full h-[90vh] md:h-[86vh] lg:h-[700px] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      
+      <!-- 彈窗頂部彩色 Header -->
+      <div class="p-3 md:p-3.5 bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-800 text-white relative shrink-0">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <span class="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-sm shadow-inner">
+              <i class="fa-solid fa-plane-departure text-white"></i>
+            </span>
+            <div>
+              <h3 class="font-black text-sm md:text-base tracking-wide flex items-center gap-1.5">
+                假期助手 · 智能拼假看板
+              </h3>
+              <span id="fbModeBadge" class="text-[10px] md:text-xs font-bold px-2 py-0.5 rounded-full bg-white/20 text-blue-100 border border-white/20 inline-block mt-0.5">
+                ☕ 隨心使用（60%~80% AL · 3-4假以量為先）
+              </span>
+            </div>
+          </div>
+          <button id="btnCloseFlightBoard" class="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+
+        <!-- 頂部快速切換條 (全額 / 靈活 / 輕量) -->
+        <div class="grid grid-cols-3 gap-1.5 p-1 bg-black/25 rounded-2xl mb-2 backdrop-blur-xs border border-white/10 text-center select-none">
+          <button type="button" id="fbSchemeBtn-max" class="fb-scheme-tab py-1.5 px-1 rounded-xl text-[11px] md:text-xs font-bold transition flex items-center justify-center gap-1 active:scale-95 text-white/80 hover:text-white hover:bg-white/10">
+            <span class="truncate">🚀 全額連假 (100%)</span>
+          </button>
+          <button type="button" id="fbSchemeBtn-casual" class="fb-scheme-tab py-1.5 px-1 rounded-xl text-[11px] md:text-xs font-bold transition flex items-center justify-center gap-1 active:scale-95 bg-white text-indigo-900 shadow-sm">
+            <span class="truncate">☕ 靈活連假 (60-80%)</span>
+          </button>
+          <button type="button" id="fbSchemeBtn-minimal" class="fb-scheme-tab py-1.5 px-1 rounded-xl text-[11px] md:text-xs font-bold transition flex items-center justify-center gap-1 active:scale-95 text-white/80 hover:text-white hover:bg-white/10">
+            <span class="truncate">🌿 輕量連假 (40-60%)</span>
+          </button>
+        </div>
+
+        <!-- KPI 統計小卡 -->
+        <div class="grid grid-cols-3 gap-2 bg-slate-900/35 backdrop-blur-md rounded-2xl p-1.5 md:p-2 border border-white/10 text-center">
+          <div class="flex flex-col">
+            <span class="text-[9px] md:text-[10px] text-blue-200 font-medium">合共享受</span>
+            <span id="fbKpiTotalDays" class="text-xs md:text-base font-black text-amber-400">放 0 日</span>
+          </div>
+          <div class="flex flex-col border-x border-white/10">
+            <span class="text-[9px] md:text-[10px] text-blue-200 font-medium">消耗年假</span>
+            <span id="fbKpiAlCost" class="text-xs md:text-base font-black text-white">請 0 日 AL</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-[9px] md:text-[10px] text-blue-200 font-medium">年假使用率</span>
+            <span id="fbKpiUsageRate" class="text-xs md:text-base font-black text-emerald-400">0%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 手機/小螢幕專屬分頁膠囊切換鈕 (大螢幕 lg 隱藏自動雙欄並排) -->
+      <div class="px-3 pt-2 pb-1.5 flex lg:hidden items-center justify-center bg-slate-100 border-b border-slate-200 shrink-0">
+        <div class="bg-slate-200/90 p-0.5 rounded-xl flex items-center gap-1 text-xs font-bold w-full max-w-xs shadow-inner">
+          <button id="fbTabList" type="button" class="flex-1 py-1 rounded-lg bg-white text-indigo-700 shadow-2xs transition flex items-center justify-center gap-1.5 font-bold">
+            <i class="fa-solid fa-list-ul text-[11px]"></i> 假期清單
+          </button>
+          <button id="fbTabCalendar" type="button" class="flex-1 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition flex items-center justify-center gap-1.5 font-medium">
+            <i class="fa-regular fa-calendar-check text-[11px]"></i> 全年分佈圖
+          </button>
+        </div>
+      </div>
+
+      <!-- 彈窗內容主體：大螢幕固定雙欄並排 (左清單 + 右日曆)，手機由 Tab 控制切換 (使用 max-lg:hidden 避免放大時被隱藏) -->
+      <div class="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-0 bg-slate-50/50">
+        <!-- 容器 1：假期卡片列表 (高度鎖定，自帶滾動) -->
+        <div id="fbTripListContainer" class="lg:col-span-6 overflow-y-auto custom-scroll p-3 md:p-3.5 space-y-2.5 lg:border-r lg:border-slate-200">
+        </div>
+
+        <!-- 容器 2：12 個月微型年曆熱力預覽圖 (高度鎖定撐滿，六日淺紅標記) -->
+        <div id="fbCalendarPreviewContainer" class="max-lg:hidden lg:flex lg:col-span-6 overflow-y-auto custom-scroll p-3 md:p-3.5 flex-col bg-slate-50/30">
+          <div class="flex items-center justify-between text-[11px] font-semibold text-slate-600 mb-2 px-1 shrink-0 pb-1 border-b border-slate-200/70">
+            <div class="flex flex-wrap items-center gap-1.5 md:gap-2 text-[10px]">
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-blue-600 shadow-xs"></span> 建議AL</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-rose-100 border border-rose-300"></span> 週末</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-amber-400"></span> 已鎖定</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-orange-100 border border-orange-300"></span> 公眾假</span>
+            </div>
+            <span class="text-[10px] text-slate-400 font-mono hidden sm:inline">2027 全年縮圖</span>
+          </div>
+          <!-- 12 個月微型網格容器 -->
+          <div id="fbMiniYearGrid" class="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-1.5 flex-1 content-start"></div>
+        </div>
+      </div>
+
+      <!-- 底部操作按鈕欄 (絕對高度固定，更換按鈕永遠在同一座標點) -->
+      <div class="p-3 bg-white border-t border-slate-200/80 flex items-center justify-between gap-2 shrink-0">
+        <button id="btnFbCancel" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold text-xs transition active:scale-95">
+          關閉
+        </button>
+        <div class="flex items-center gap-2">
+          <button id="btnFbRegenerate" class="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl font-bold text-xs flex items-center gap-1.5 transition active:scale-95 shadow-2xs">
+            <i class="fa-solid fa-rotate text-[11px]"></i>
+            <span>更換</span>
+          </button>
+          <button id="btnFbApply" class="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-500/20 flex items-center gap-1.5 transition active:scale-95">
+            <i class="fa-solid fa-wand-magic-sparkles text-[11px]"></i>
+            <span>套用</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+    <!-- 專屬彈窗：請假紀錄清單 (手機版頂部快速調閱 / 全覽調閱) -->
+  <div id="modalOverviewLeaves" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm hidden p-3 md:p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div class="p-3.5 border-b border-slate-100 bg-blue-50 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center text-sm shadow-xs">
+            <i class="fa-solid fa-list-check"></i>
+          </span>
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm">2027 請假紀錄表</h3>
+            <p class="text-[10px] text-blue-700">共 <span id="modalLeavesCount">0</span> 筆休假排程</p>
+          </div>
+        </div>
+        <button id="btnCloseOverviewLeaves" class="text-slate-400 hover:text-slate-700 text-base p-1">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div id="overviewLeavesListBody" class="flex-1 overflow-y-auto custom-scroll p-3 text-xs">
+        <!-- 動態渲染請假紀錄 -->
+      </div>
+    </div>
+  </div>
+
+<!-- 全覽模式下的彈窗：公眾假期清單 -->
+  <div id="modalOverviewHolidays" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm hidden p-3 md:p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div class="p-3.5 border-b border-slate-100 bg-orange-50 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="w-8 h-8 rounded-lg bg-orange-500 text-white flex items-center justify-center text-sm shadow-xs">
+            <i class="fa-solid fa-calendar-days"></i>
+          </span>
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm">2027 香港法定及公眾假期</h3>
+            <p class="text-[10px] text-orange-700">全港通用假期一覽</p>
+          </div>
+        </div>
+        <button id="btnCloseOverviewHolidays" class="text-slate-400 hover:text-slate-700 text-base p-1">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div id="overviewHolidaysListBody" class="flex-1 overflow-y-auto custom-scroll p-3 text-xs">
+        <!-- 動態複製公眾假期內容 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 全覽模式下的彈窗：農曆節氣清單 -->
+  <div id="modalOverviewLunar" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm hidden p-3 md:p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div class="p-3.5 border-b border-slate-100 bg-amber-50 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center text-sm shadow-xs">
+            <i class="fa-solid fa-moon"></i>
+          </span>
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm">2027 丁未羊年 農曆與節氣</h3>
+            <p class="text-[10px] text-amber-800">歲次、廿四節氣與傳統節日</p>
+          </div>
+        </div>
+        <button id="btnCloseOverviewLunar" class="text-slate-400 hover:text-slate-700 text-base p-1">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div id="overviewLunarListBody" class="flex-1 overflow-y-auto custom-scroll p-3 text-xs">
+        <!-- 動態複製農曆節氣內容 -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const HK_HOLIDAYS_2027 = {
+      '2027-01-01': '元旦', '2027-02-06': '農曆年初一', '2027-02-07': '農曆年初二',
+      '2027-02-08': '農曆年初三', '2027-02-09': '農曆年初四 (補假)', '2027-03-26': '耶穌受難節',
+      '2027-03-27': '耶穌受難節翌日', '2027-03-29': '復活節星期一', '2027-04-04': '清明節',
+      '2027-04-05': '清明節翌日 (補假)', '2027-05-01': '勞動節', '2027-05-13': '佛誕',
+      '2027-06-09': '端午節', '2027-07-01': '香港特別行政區成立紀念日', '2027-09-16': '中秋節翌日',
+      '2027-10-01': '國慶日', '2027-10-08': '重陽節', '2027-12-25': '聖誕節',
+      '2027-12-26': '節禮日', '2027-12-27': '聖誕節後第二個周日 (補假)'
+    };
+    
+    const SUNDAY_HOLIDAYS_PINK = ['2027-02-07', '2027-04-04', '2027-12-26'];
+
+    const FIREBASE_BASE_URL = 'https://calendarproject-hk2027-default-rtdb.firebaseio.com';
+    const ADMIN_OVERRIDE_KEY = 'ADMIN_RESET_2027';
+
+    let activeBrush = 'annual';
+    let leaveData = {};
+    let annualQuota = 14;
+    let wbQuota = 4;
+    let currentRoom = 'TE7358';
+    let eventSource = null;
+    let isRemoteUpdating = false;
+    let lastLocalEditTime = 0;
+
+    let remoteRoomPin = null;
+    let isRoomUnlocked = false;
+
+    let isEditMode = false;
+
+    let longPressTimer = null;
+    let touchMoved = false;
+
+    let cycleCommitTimers = {};
+    const COMMIT_DELAY_MS = 1200;
+
+    let currentGeneratedCombo = null;
+    let currentTravelMode = 'max';
+    let lastAvailableAl = 0;
+
+    function getThrottleKey(room) {
+      return `pin_throttle_${room}`;
+    }
+
+    function checkThrottled(room) {
+      const rec = JSON.parse(localStorage.getItem(getThrottleKey(room)) || '{"fails":0,"lockUntil":0}');
+      if (rec.lockUntil && Date.now() < rec.lockUntil) {
+        const remainingMinutes = Math.ceil((rec.lockUntil - Date.now()) / 60000);
+        return `⚠️ 密碼錯誤次數過多，已被系統鎖定。請於 ${remainingMinutes} 分鐘後再試。`;
+      }
+      return null;
+    }
+
+    function recordFailedAttempt(room) {
+      const key = getThrottleKey(room);
+      const rec = JSON.parse(localStorage.getItem(key) || '{"fails":0,"lockUntil":0}');
+      rec.fails = (rec.fails || 0) + 1;
+      if (rec.fails >= 5) {
+        rec.lockUntil = Date.now() + 10 * 60 * 1000;
+        localStorage.setItem(key, JSON.stringify(rec));
+        return '⚠️ 連續錯誤達 5 次！系統已鎖定 10 分鐘以防暴力破解。';
+      }
+      localStorage.setItem(key, JSON.stringify(rec));
+      return `密碼不正確！剩餘嘗試次數：${5 - rec.fails} 次`;
+    }
+
+    function clearThrottle(room) {
+      localStorage.removeItem(getThrottleKey(room));
+    }
+
+    function getLocalSavedPin(room) {
+      return localStorage.getItem(`room_auth_pin_${room}`);
+    }
+
+    function setLocalSavedPin(room, pin) {
+      localStorage.setItem(`room_auth_pin_${room}`, pin);
+    }
+
+    function setAppLockState(isLocked) {
+      const app = document.getElementById('appMainWrapper');
+      if (isLocked) {
+        app.classList.add('locked-blur');
+      } else {
+        app.classList.remove('locked-blur');
+      }
+    }
+
+    function showActivationModal() {
+      setAppLockState(true);
+      document.getElementById('actRoomLabel').textContent = currentRoom;
+      document.getElementById('actPinInput').value = '';
+      document.getElementById('actPinConfirmInput').value = '';
+      const errEl = document.getElementById('actErrorMsg');
+      errEl.classList.add('hidden');
+      errEl.textContent = '';
+      document.getElementById('modalUnlockPin').classList.add('hidden');
+      document.getElementById('modalActivationPin').classList.remove('hidden');
+    }
+
+    function showUnlockModal() {
+      setAppLockState(true);
+      document.getElementById('unlockRoomLabel').textContent = currentRoom;
+      document.getElementById('unlockPinInput').value = '';
+      const errEl = document.getElementById('unlockErrorMsg');
+      errEl.textContent = '';
+      
+      const lockMsg = checkThrottled(currentRoom);
+      if (lockMsg) {
+        errEl.textContent = lockMsg;
+        document.getElementById('btnSubmitUnlock').disabled = true;
+      } else {
+        document.getElementById('btnSubmitUnlock').disabled = false;
+      }
+      
+      document.getElementById('modalActivationPin').classList.add('hidden');
+      document.getElementById('modalUnlockPin').classList.remove('hidden');
+    }
+
+    function closeAllAuthModals() {
+      document.getElementById('modalActivationPin').classList.add('hidden');
+      document.getElementById('modalUnlockPin').classList.add('hidden');
+      setAppLockState(false);
+    }
+
+    function indicateSync(text, isGreen = true) {
+      const el = document.getElementById('desktopSyncIndicator');
+      if (el) {
+        el.className = isGreen ? 'inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600' : 'inline-flex items-center gap-1 text-[11px] font-medium text-amber-600';
+        el.innerHTML = `<span class="w-2 h-2 rounded-full ${isGreen ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}"></span> ${text}`;
+      }
+    }
+
+    function pushData() {
+      if (isRemoteUpdating || !isRoomUnlocked) return;
+      lastLocalEditTime = Date.now();
+      indicateSync('同步中...', false);
+      
+      const cleanLeave = {};
+      if (leaveData) {
+        for (const k in leaveData) {
+          if (leaveData[k] && (leaveData[k].am || leaveData[k].pm)) {
+            cleanLeave[k] = leaveData[k];
+          }
+        }
+      }
+
+      const payload = {
+        leaveData: cleanLeave,
+        hasLeaves: Object.keys(cleanLeave).length > 0,
+        annualQuota: annualQuota,
+        wbQuota: wbQuota,
+        pin: remoteRoomPin || null,
+        timestamp: lastLocalEditTime
+      };
+      
+      localStorage.setItem('hk_local_' + currentRoom, JSON.stringify(payload));
+
+      fetch(`${FIREBASE_BASE_URL}/rooms/${currentRoom}.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(res => {
+        if (!res.ok) throw new Error('Firebase HTTP ' + res.status);
+        indicateSync('連線正常', true);
+      })
+      .catch(err => {
+        console.error('Firebase save error:', err);
+        indicateSync('已存本機', false);
+      });
+    }
+
+    function applyRemoteData(data) {
+      if (!data) return;
+      if (Date.now() - lastLocalEditTime < 800) return;
+
+      isRemoteUpdating = true;
+      leaveData = data.leaveData || {};
+      
+      if (data.annualQuota !== undefined && !isNaN(data.annualQuota)) {
+        annualQuota = Number(data.annualQuota);
+        const aqEl = document.getElementById('annualQuotaInput');
+        if (aqEl) aqEl.value = annualQuota;
+      }
+      if (data.wbQuota !== undefined && !isNaN(data.wbQuota)) {
+        wbQuota = Number(data.wbQuota);
+        const wqEl = document.getElementById('wbQuotaInput');
+        if (wqEl) wqEl.value = wbQuota;
+      }
+      
+      renderMonthGrid();
+      updateDashboard();
+      isRemoteUpdating = false;
+      indicateSync('連線正常', true);
+    }
+
+    function checkRoomSecurityAndConnect() {
+      indicateSync('驗證中...', false);
+
+      fetch(`${FIREBASE_BASE_URL}/rooms/${currentRoom}.json`)
+        .then(res => res.json())
+        .then(data => {
+          remoteRoomPin = data && data.pin ? String(data.pin) : null;
+
+          if (!remoteRoomPin) {
+            isRoomUnlocked = false;
+            showActivationModal();
+            return;
+          }
+
+          const localPin = getLocalSavedPin(currentRoom);
+          if (localPin && localPin === remoteRoomPin) {
+            isRoomUnlocked = true;
+            closeAllAuthModals();
+            if (data) applyRemoteData(data);
+            startFirebaseSSE();
+          } else {
+            isRoomUnlocked = false;
+            leaveData = {};
+            renderMonthGrid();
+            updateDashboard();
+            showUnlockModal();
+          }
+        })
+        .catch(err => {
+          console.warn('載入房間資訊失敗，切本地模式:', err);
+          indicateSync('本地模式', false);
+        });
+    }
+
+    function startFirebaseSSE() {
+      if (eventSource) {
+        try { eventSource.close(); } catch(e) {}
+      }
+
+      try {
+        eventSource = new EventSource(`${FIREBASE_BASE_URL}/rooms/${currentRoom}.json`);
+        
+        eventSource.addEventListener('put', function(e) {
+          try {
+            const parsed = JSON.parse(e.data);
+            if (parsed && isRoomUnlocked) {
+              if (parsed.path === '/' && parsed.data) {
+                applyRemoteData(parsed.data);
+              } else if (parsed.path === '/') {
+                applyRemoteData({ leaveData: {} });
+              } else {
+                pullData();
+              }
+            }
+          } catch(err) {
+            console.error('SSE put error:', err);
+          }
+        });
+
+        eventSource.addEventListener('patch', function() {
+          if (isRoomUnlocked) pullData();
+        });
+
+        eventSource.onerror = function() {
+          indicateSync('重新連接...', false);
+        };
+      } catch(e) {
+        console.error('EventSource init failed:', e);
+      }
+    }
+
+    function pullData() {
+      if (!isRoomUnlocked) return;
+      fetch(`${FIREBASE_BASE_URL}/rooms/${currentRoom}.json`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && !isRemoteUpdating) {
+            applyRemoteData(data);
+          }
+        })
+        .catch(() => {});
+    }
+
+    function loadLocalFirst() {
+      const urlParams = new URLSearchParams(window.location.search);
+      let r = urlParams.get('room') || localStorage.getItem('hk_sync_room_id') || 'TE7358';
+      currentRoom = r.toUpperCase();
+      localStorage.setItem('hk_sync_room_id', currentRoom);
+      
+      const dInput = document.getElementById('desktopRoomInput');
+      const mInput = document.getElementById('mobileRoomInput');
+      if (dInput) dInput.value = currentRoom;
+      if (mInput) mInput.value = currentRoom;
+
+      const actEl = document.getElementById('actRoomLabel');
+      if (actEl) actEl.textContent = currentRoom;
+      const unlEl = document.getElementById('unlockRoomLabel');
+      if (unlEl) unlEl.textContent = currentRoom;
+      const expEl = document.getElementById('exportRoomLabel');
+      if (expEl) expEl.textContent = currentRoom;
+      const rstEl = document.getElementById('resetPinRoomLabel');
+      if (rstEl) rstEl.textContent = currentRoom;
+
+      const local = localStorage.getItem('hk_local_' + currentRoom);
+      if (local) {
+        try {
+          const parsed = JSON.parse(local);
+          leaveData = parsed.leaveData || {};
+          annualQuota = parsed.annualQuota || 14;
+          wbQuota = parsed.wbQuota || 4;
+          const aqEl = document.getElementById('annualQuotaInput');
+          const wqEl = document.getElementById('wbQuotaInput');
+          if (aqEl) aqEl.value = annualQuota;
+          if (wqEl) wqEl.value = wbQuota;
+        } catch(e) {}
+      }
+    }
+
+    function renderMonthGrid() {
+      const container = document.getElementById('calendarContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      const monthNamesEn = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+      const weekDays = ["日", "一", "二", "三", "四", "五", "六"];
+
+      for (let m = 0; m < 12; m++) {
+        const monthCard = document.createElement('div');
+        monthCard.className = 'month-card bg-white rounded-xl border border-slate-200 shadow-xs p-2.5 md:p-3 flex flex-col justify-between';
+
+        let html = `
+          <div class="month-header-title flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-100">
+            <div class="flex items-baseline gap-1.5">
+              <span class="font-bold text-base md:text-lg text-black tracking-tight">${m + 1}月</span>
+              <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">${monthNamesEn[m]}</span>
+            </div>
+            <span class="text-[10px] text-slate-400 font-medium">2027</span>
+          </div>
+          <div class="weekdays-header grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-slate-400 mb-1">
+            ${weekDays.map((d, idx) => `<span class="${idx === 0 || idx === 6 ? 'text-pink-500 font-bold' : ''}">${d}</span>`).join('')}
+          </div>
+          <div class="month-grid-days grid grid-cols-7 gap-1">
+        `;
+
+        const firstDay = new Date(2027, m, 1).getDay();
+        const daysInMonth = new Date(2027, m + 1, 0).getDate();
+
+        for (let b = 0; b < firstDay; b++) {
+          html += `<div class="calendar-cell bg-slate-50/50 rounded border border-transparent pointer-events-none"></div>`;
+        }
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dayOfWeek = (firstDay + d - 1) % 7;
+          const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+          const dateStr = `2027-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          const isHoliday = HK_HOLIDAYS_2027[dateStr];
+          const isSundayHolidayPink = SUNDAY_HOLIDAYS_PINK.includes(dateStr);
+
+          let baseBg = 'bg-white border-slate-200';
+          let textColor = 'text-slate-700';
+
+          if (isSundayHolidayPink) {
+            baseBg = 'bg-pink-50/80 border-pink-100 special-sunday-holiday';
+            textColor = 'text-pink-600 font-medium';
+          } else if (isHoliday) {
+            baseBg = 'bg-orange-50 border-orange-200';
+            textColor = 'text-orange-700 font-bold';
+          } else if (isWeekend) {
+            baseBg = 'bg-pink-50/80 border-pink-100';
+            textColor = 'text-pink-600 font-medium';
+          }
+
+          const dayLeave = leaveData[dateStr] || { am: null, pm: null, locked: false };
+          const getFillClass = (val) => {
+            if (val === 'annual') return 'leave-annual';
+            if (val === 'wb') return 'leave-wb';
+            if (val === 'birthday') return 'leave-birthday';
+            if (val === 'special') return 'leave-special';
+            return '';
+          };
+
+          const amClass = getFillClass(dayLeave.am);
+          const pmClass = getFillClass(dayLeave.pm);
+
+          let numColor = textColor;
+          if (dayLeave.am === 'birthday' && dayLeave.pm === 'birthday') {
+            numColor = 'text-emerald-950 font-bold';
+          } else if (dayLeave.am === 'special' && dayLeave.pm === 'special') {
+            numColor = 'text-slate-700 font-bold';
+          } else if (dayLeave.am && dayLeave.pm) {
+            numColor = 'text-white font-bold drop-shadow-xs';
+          } else if (dayLeave.am || dayLeave.pm) {
+            numColor = 'text-slate-900 font-bold';
+          }
+
+          const lockBadge = dayLeave.locked 
+            ? `<i class="lock-badge fa-solid fa-lock absolute top-1 right-1 text-[8px] text-amber-500 z-20 pointer-events-none drop-shadow-xs"></i>` 
+            : '';
+
+          const isPending = cycleCommitTimers[dateStr] ? 'cell-pending-commit' : '';
+
+          html += `
+            <div class="calendar-cell border rounded ${baseBg} ${isPending}" data-date="${dateStr}" title="${isHoliday ? (isHoliday + ' (' + dateStr + ')') : dateStr}">
+              ${lockBadge}
+              <div class="half-slot slot-am ${amClass}"></div>
+              <div class="half-slot slot-pm ${pmClass}"></div>
+              <span class="day-number ${numColor}">${d}</span>
+            </div>
+          `;
+        }
+
+        const totalSlots = firstDay + daysInMonth;
+        const totalNeeded = totalSlots > 35 ? 42 : 35;
+        for (let t = totalSlots; t < totalNeeded; t++) {
+          html += `<div class="calendar-cell bg-slate-50/30 rounded border border-transparent pointer-events-none"></div>`;
+        }
+
+        html += `</div>`;
+        monthCard.innerHTML = html;
+        container.appendChild(monthCard);
+      }
+
+      bindCells();
+    }
+
+    function bindCells() {
+      document.querySelectorAll('.calendar-cell[data-date]').forEach(cell => {
+        const dateStr = cell.getAttribute('data-date');
+
+        cell.addEventListener('touchstart', () => {
+          touchMoved = false;
+          longPressTimer = setTimeout(() => {
+            if (!touchMoved) {
+              toggleDayLock(dateStr);
+            }
+          }, 750);
+        }, { passive: true });
+
+        cell.addEventListener('touchmove', () => {
+          touchMoved = true;
+          clearTimeout(longPressTimer);
+        }, { passive: true });
+
+        cell.addEventListener('touchend', () => {
+          clearTimeout(longPressTimer);
+        });
+
+        cell.addEventListener('mousedown', (e) => {
+          if (e.button !== 0) return;
+          longPressTimer = setTimeout(() => {
+            toggleDayLock(dateStr);
+          }, 750);
+        });
+        cell.addEventListener('mouseup', () => clearTimeout(longPressTimer));
+        cell.addEventListener('mouseleave', () => clearTimeout(longPressTimer));
+
+        cell.onclick = () => {
+          if (!isRoomUnlocked) {
+            showUnlockModal();
+            return;
+          }
+          if (!isEditMode) {
+            showToast('🔒 目前處於唯讀模式。請先按右上角「切換編輯模式」再修改！');
+            return;
+          }
+          onCellClick(dateStr);
+        };
+      });
+    }
+
+    function toggleDayLock(dateStr) {
+      if (!isRoomUnlocked) return;
+      const cur = leaveData[dateStr];
+      if (!cur || (!cur.am && !cur.pm)) {
+        showToast('💡 只有已排定假期的日子才可進行「長按鎖定」保護！');
+        return;
+      }
+
+      cur.locked = !cur.locked;
+      pushData();
+      renderMonthGrid();
+      updateDashboard();
+
+      if (cur.locked) {
+        showToast(`🔒 ${dateStr} 已鎖定保護！`);
+      } else {
+        showToast(`🔓 ${dateStr} 已解除鎖定。`);
+      }
+    }
+
+    function calculateUsage(data) {
+      let al = 0, wb = 0, special = 0;
+      for (const d in data) {
+        const item = data[d];
+        if (!item) continue;
+        if (item.am === 'annual') al += 0.5;
+        if (item.pm === 'annual') al += 0.5;
+        if (item.am === 'wb') wb += 0.5;
+        if (item.pm === 'wb') wb += 0.5;
+        if (item.am === 'special') special += 0.5;
+        if (item.pm === 'special') special += 0.5;
+      }
+      return { al, wb, special };
+    }
+
+    function onCellClick(dateStr) {
+      const cur = leaveData[dateStr] || { am: null, pm: null, note: '個人假期', locked: false };
+
+      if (cur.locked) {
+        showToast(`⚠️ ${dateStr} 已鎖定保護！長按可解除。`);
+        return;
+      }
+
+      if (activeBrush === 'eraser') {
+        if (leaveData[dateStr]) {
+          delete leaveData[dateStr];
+          pushData();
+          renderMonthGrid();
+          updateDashboard();
+        }
+        return;
+      }
+
+      const draft = JSON.parse(JSON.stringify(leaveData));
+      const targetType = activeBrush;
+      const defaultNote = targetType === 'special' ? 'S 特假' : (targetType === 'birthday' ? 'BL 生日假' : '個人假期');
+
+      let currentCycleState = 'none';
+      if (cur.am && cur.pm) {
+        currentCycleState = 'full';
+      } else if (cur.am && !cur.pm) {
+        currentCycleState = 'am';
+      } else if (!cur.am && cur.pm) {
+        currentCycleState = 'pm';
+      } else {
+        currentCycleState = 'none';
+      }
+
+      let nextState = 'full';
+
+      if (targetType === 'wb') {
+        if (currentCycleState === 'none' || currentCycleState === 'full') {
+          nextState = 'am';
+        } else if (currentCycleState === 'am') {
+          nextState = 'pm';
+        } else if (currentCycleState === 'pm') {
+          nextState = 'none';
+        }
+      } else if (targetType === 'birthday') {
+        nextState = currentCycleState === 'full' ? 'none' : 'full';
+        const existingBday = Object.keys(draft).find(d => 
+          d !== dateStr && (draft[d].am === 'birthday' || draft[d].pm === 'birthday')
+        );
+        if (existingBday && nextState === 'full') {
+          showToast(`⚠️ BL 生日假每年限1次（已在 ${existingBday}）`);
+          return;
+        }
+      } else {
+        if (currentCycleState === 'none') {
+          nextState = 'full';
+        } else if (currentCycleState === 'full') {
+          nextState = 'am';
+        } else if (currentCycleState === 'am') {
+          nextState = 'pm';
+        } else if (currentCycleState === 'pm') {
+          nextState = 'none';
+        }
+      }
+
+      if (nextState === 'full') {
+        draft[dateStr] = { am: targetType, pm: targetType, note: cur.note || defaultNote, locked: false };
+      } else if (nextState === 'am') {
+        draft[dateStr] = { am: targetType, pm: null, note: cur.note || defaultNote, locked: false };
+      } else if (nextState === 'pm') {
+        draft[dateStr] = { am: null, pm: targetType, note: cur.note || defaultNote, locked: false };
+      } else if (nextState === 'none') {
+        delete draft[dateStr];
+      }
+
+      const { al, wb } = calculateUsage(draft);
+      if (al > annualQuota) {
+        showToast(`⚠️「AL 年假」配額已達上限（${annualQuota} 日）`);
+        return;
+      }
+      if (wb > wbQuota) {
+        showToast(`⚠️「WB 假期」已達上限（${wbQuota} 次）`);
+        return;
+      }
+
+      leaveData = draft;
+      renderMonthGrid();
+      updateDashboard();
+
+      if (cycleCommitTimers[dateStr]) {
+        clearTimeout(cycleCommitTimers[dateStr]);
+      }
+
+      cycleCommitTimers[dateStr] = setTimeout(() => {
+        delete cycleCommitTimers[dateStr];
+        pushData();
+        renderMonthGrid();
+      }, COMMIT_DELAY_MS);
+    }
+
+    function updateDashboard() {
+      let annualUsed = 0, wbUsed = 0, specialUsed = 0, bdayDate = null;
+      const sorted = Object.keys(leaveData).sort();
+      const tbody = document.getElementById('leaveTableBody');
+      if (tbody) tbody.innerHTML = '';
+
+      sorted.forEach(dateStr => {
+        const item = leaveData[dateStr];
+        if (!item || (!item.am && !item.pm)) return;
+        if (!item.note) item.note = '個人假期';
+        if (item.am === 'birthday' || item.pm === 'birthday') bdayDate = dateStr;
+
+        if (item.am === 'annual') annualUsed += 0.5;
+        if (item.pm === 'annual') annualUsed += 0.5;
+        if (item.am === 'wb') wbUsed += 0.5;
+        if (item.pm === 'wb') wbUsed += 0.5;
+        if (item.am === 'special') specialUsed += 0.5;
+        if (item.pm === 'special') specialUsed += 0.5;
+
+        const getName = (v) => {
+          if (v === 'annual') return 'AL';
+          if (v === 'wb') return 'WB';
+          if (v === 'birthday') return 'BL';
+          if (v === 'special') return 'S';
+          return '';
+        };
+
+        let slotDesc = '', typeDesc = '', badge = '';
+        if (item.am === 'birthday' && item.pm === 'birthday') {
+          slotDesc = '全日'; typeDesc = '🎂 BL 生日假';
+          badge = 'bg-emerald-100 text-emerald-800 border border-emerald-300';
+        } else if (item.am === 'special' && item.pm === 'special') {
+          slotDesc = '全日'; typeDesc = '🛡️ S 特假';
+          badge = 'bg-slate-200 text-slate-700 border border-slate-300';
+        } else if (item.am && item.pm) {
+          if (item.am === item.pm) {
+            slotDesc = '全日';
+            typeDesc = item.am === 'annual' ? 'AL 全日' : 'WB 全日';
+            badge = item.am === 'annual' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700';
+          } else {
+            slotDesc = '混搭';
+            typeDesc = `${getName(item.am)} + ${getName(item.pm)}`;
+            badge = 'bg-indigo-100 text-indigo-700';
+          }
+        } else if (item.am) {
+          slotDesc = 'AM';
+          if (item.am === 'annual') { typeDesc = 'AL AM'; badge = 'bg-blue-100 text-blue-700'; }
+          else if (item.am === 'wb') { typeDesc = 'WB AM'; badge = 'bg-purple-100 text-purple-700'; }
+          else if (item.am === 'special') { typeDesc = 'S AM'; badge = 'bg-slate-200 text-slate-700 border border-slate-300'; }
+          else { typeDesc = 'BL AM'; badge = 'bg-emerald-100 text-emerald-700'; }
+        } else if (item.pm) {
+          slotDesc = 'PM';
+          if (item.pm === 'annual') { typeDesc = 'AL PM'; badge = 'bg-blue-100 text-blue-700'; }
+          else if (item.pm === 'wb') { typeDesc = 'WB PM'; badge = 'bg-purple-100 text-purple-700'; }
+          else if (item.pm === 'special') { typeDesc = 'S PM'; badge = 'bg-slate-200 text-slate-700 border border-slate-300'; }
+          else { typeDesc = 'BL PM'; badge = 'bg-emerald-100 text-emerald-700'; }
+        }
+
+        const lockIcon = item.locked ? '<i class="fa-solid fa-lock text-amber-500 mr-1 text-[10px]" title="已個別鎖定"></i>' : '';
+
+        if (tbody) {
+          const tr = document.createElement('tr');
+          tr.className = 'hover:bg-slate-50 transition';
+          tr.innerHTML = `
+            <td class="py-2 px-2 font-medium text-slate-800 whitespace-nowrap">${lockIcon}${dateStr}</td>
+            <td class="py-2 px-1 text-center"><span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600">${slotDesc}</span></td>
+            <td class="py-2 px-1 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[10px] font-medium ${badge}">${typeDesc}</span></td>
+            <td class="py-2 px-2"><input type="text" value="${item.note}" class="note-input w-full px-1.5 py-0.5 text-xs border border-slate-200 rounded focus:border-blue-400 focus:outline-none bg-white" data-date="${dateStr}"></td>
+            <td class="py-2 px-1 text-right whitespace-nowrap">
+              <button class="delete-btn text-slate-400 hover:text-red-500 transition px-1" data-date="${dateStr}" ${item.locked ? 'disabled title="已鎖定"' : ''}>
+                <i class="fa-solid fa-xmark ${item.locked ? 'opacity-30 cursor-not-allowed' : ''}"></i>
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        }
+      });
+
+      const count = sorted.length;
+      document.getElementById('recordCount').textContent = count;
+      document.getElementById('emptyLeaveNotice').style.display = count === 0 ? 'block' : 'none';
+
+      document.getElementById('annualUsedText').textContent = `${annualUsed.toFixed(1)}日`;
+      const alRemain = annualQuota - annualUsed;
+      const alRemainEl = document.getElementById('annualRemainText');
+      alRemainEl.textContent = `${alRemain.toFixed(1)}日`;
+      alRemainEl.className = alRemain <= 0 ? 'text-[11px] md:text-base font-bold text-red-600' : 'text-[11px] md:text-base font-bold text-blue-600';
+
+      document.getElementById('wbUsedText').textContent = `${wbUsed.toFixed(1)}次`;
+      const wbRemain = wbQuota - wbUsed;
+      const wbRemainEl = document.getElementById('wbRemainText');
+      wbRemainEl.textContent = `${wbRemain.toFixed(1)}次`;
+      wbRemainEl.className = wbRemain <= 0 ? 'text-[11px] md:text-base font-bold text-red-600' : 'text-[11px] md:text-base font-bold text-purple-600';
+
+      const specialUsedEl = document.getElementById('specialUsedText');
+      if (specialUsedEl) {
+        specialUsedEl.textContent = `${specialUsed.toFixed(1)}日`;
+      }
+
+      const bdayDateEl = document.getElementById('bdayDateText');
+      const bdayUsedEl = document.getElementById('bdayUsedText') || document.getElementById('bdayRemainText');
+      if (bdayDate) {
+        bdayDateEl.textContent = bdayDate;
+        bdayDateEl.className = 'font-bold text-emerald-700 truncate block';
+        if (bdayUsedEl) {
+          bdayUsedEl.textContent = '1次';
+          bdayUsedEl.className = 'text-[11px] md:text-base font-bold text-emerald-600';
+        }
+      } else {
+        bdayDateEl.textContent = '未登記';
+        bdayDateEl.className = 'font-medium text-slate-400 truncate block';
+        if (bdayUsedEl) {
+          bdayUsedEl.textContent = '0次';
+          bdayUsedEl.className = 'text-[11px] md:text-base font-bold text-slate-700';
+        }
+      }
+
+      const ovAl = document.getElementById('overviewAlStats');
+      if (ovAl) ovAl.textContent = `${alRemain.toFixed(1)}/${annualUsed.toFixed(1)}`;
+      const ovWb = document.getElementById('overviewWbStats');
+      if (ovWb) ovWb.textContent = `${wbRemain.toFixed(1)}/${wbUsed.toFixed(1)}`;
+      const ovSp = document.getElementById('overviewSpecialStats');
+      if (ovSp) ovSp.textContent = `${specialUsed.toFixed(1)}日`;
+      const ovBd = document.getElementById('overviewBdayStats');
+      if (ovBd) ovBd.textContent = bdayDate ? '1次' : '0次';
+
+      document.querySelectorAll('.note-input').forEach(input => {
+        input.onchange = (e) => {
+          const d = e.target.getAttribute('data-date');
+          if (leaveData[d]) {
+            leaveData[d].note = e.target.value;
+            pushData();
+          }
+        };
+      });
+
+      document.querySelectorAll('.delete-btn:not([disabled])').forEach(btn => {
+        btn.onclick = () => {
+          const d = btn.getAttribute('data-date');
+          if (leaveData[d] && leaveData[d].locked) {
+            alert('此日子已受鎖定保護，無法直接刪除！');
+            return;
+          }
+          delete leaveData[d];
+          pushData();
+          renderMonthGrid();
+          updateDashboard();
+        };
+      });
+    }
+
+    function showToast(msg, options = {}) {
+      let toast = document.getElementById('appToast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'appToast';
+        toast.className = 'fixed top-4 left-1/2 -translate-x-1/2 z-50 transition-all duration-200 pointer-events-none opacity-0 translate-y-[-8px] max-w-[92vw] sm:max-w-md w-full px-2';
+        document.body.appendChild(toast);
+      }
+
+      let title = options.title || '';
+      let subtitle = options.subtitle || '';
+      let icon = options.icon || 'fa-solid fa-circle-info';
+      let iconBg = options.iconBg || 'bg-slate-800';
+
+      if (!title) {
+        if (msg.includes('AL') || msg.includes('年假')) {
+          title = '已選取：AL 年假';
+          subtitle = '點擊循環：全日 ➔ AM ➔ PM ➔ 清除';
+          icon = 'fa-solid fa-umbrella-beach';
+          iconBg = 'bg-blue-600';
+        } else if (msg.includes('WB')) {
+          title = '已選取：WB 假';
+          subtitle = '點擊循環：AM ➔ PM ➔ 清除（無全日）';
+          icon = 'fa-solid fa-heart-pulse';
+          iconBg = 'bg-purple-600';
+        } else if (msg.includes('特假') || msg.includes('S 特假')) {
+          title = '已選取：S 特假';
+          subtitle = '點擊循環：全日 ➔ AM ➔ PM ➔ 清除';
+          icon = 'fa-solid fa-shield-halved';
+          iconBg = 'bg-slate-700';
+        } else if (msg.includes('生日') || msg.includes('BL')) {
+          title = '已選取：BL 生日假';
+          subtitle = '每年限登記 1 次';
+          icon = 'fa-solid fa-cake-candles';
+          iconBg = 'bg-emerald-600';
+        } else if (msg.includes('清除') || msg.includes('橡皮擦')) {
+          title = '編輯模式';
+          subtitle = '點擊日子即可作編輯';
+          icon = 'fa-solid fa-eraser';
+          iconBg = 'bg-red-500';
+        } else if (msg.includes('唯讀') || msg.includes('🔒')) {
+          title = '唯讀模式';
+          subtitle = msg.replace(/^[🔒\s]+/, '');
+          icon = 'fa-solid fa-lock';
+          iconBg = 'bg-slate-600';
+        } else if (msg.includes('編輯') || msg.includes('✏️')) {
+          title = '編輯模式';
+          subtitle = msg.replace(/^[✏️\s]+/, '');
+          icon = 'fa-solid fa-pen';
+          iconBg = 'bg-amber-500';
+        } else if (msg.includes('成功') || msg.includes('✅') || msg.includes('🎉') || msg.includes('✨')) {
+          title = '操作成功';
+          subtitle = msg.replace(/^[✅🎉✨\s]+/, '');
+          icon = 'fa-solid fa-circle-check';
+          iconBg = 'bg-emerald-600';
+        } else if (msg.includes('⚠️') || msg.includes('❌')) {
+          title = '提示';
+          subtitle = msg.replace(/^[⚠️❌\s]+/, '');
+          icon = 'fa-solid fa-triangle-exclamation';
+          iconBg = 'bg-amber-600';
+        } else {
+          title = '提示';
+          subtitle = msg;
+          icon = 'fa-solid fa-circle-info';
+          iconBg = 'bg-slate-700';
+        }
+      }
+
+      toast.innerHTML = `
+        <div class="bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200 shadow-xl p-2.5 flex items-center gap-2.5 w-full animate-in fade-in zoom-in-95 duration-150">
+          <span class="w-8 h-8 rounded-xl ${iconBg} text-white flex items-center justify-center text-sm shadow-xs shrink-0">
+            <i class="${icon}"></i>
+          </span>
+          <div class="flex-1 min-w-0 text-left">
+            <h4 class="font-bold text-slate-900 text-xs md:text-sm leading-tight">${title}</h4>
+            <p class="text-[10px] md:text-[11px] text-slate-500 mt-0.5 truncate leading-tight">${subtitle}</p>
+          </div>
+        </div>
+      `;
+
+      toast.classList.remove('opacity-0', 'translate-y-[-8px]');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', 'translate-y-[-8px]');
+      }, 1000);
+    }
+
+    function doExportIcalFile() {
+      const keys = Object.keys(leaveData);
+      if (keys.length === 0) return;
+
+      let ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//2027 HK Leave System//ZH\r\nCALSCALE:GREGORIAN\r\n";
+      keys.forEach(dateStr => {
+        const item = leaveData[dateStr];
+        const dateClean = dateStr.replace(/-/g, '');
+        const noteText = item.note || '個人假期';
+        let summary = '請假';
+        if (item.am === 'birthday' && item.pm === 'birthday') summary = '🎂 BL 生日假';
+        else if (item.am === 'special' && item.pm === 'special') summary = 'S 特假 - 個人事務';
+        else if (item.am === 'annual' && item.pm === 'annual') summary = 'AL 全日';
+        else if (item.am && item.pm) summary = `休假 (AM: ${item.am}, PM: ${item.pm})`;
+        else if (item.am) summary = item.am === 'annual' ? 'AL AM' : (item.am === 'special' ? 'S AM' : 'WB AM');
+        else if (item.pm) summary = item.pm === 'annual' ? 'AL PM' : (item.pm === 'special' ? 'S PM' : 'WB PM');
+
+        ics += "BEGIN:VEVENT\r\n";
+        ics += `DTSTART;VALUE=DATE:${dateClean}\r\n`;
+        ics += `SUMMARY:${summary} - ${noteText}\r\n`;
+        ics += `STATUS:CONFIRMED\r\n`;
+        ics += "END:VEVENT\r\n";
+      });
+      ics += "END:VCALENDAR";
+
+      const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute('download', `${currentRoom}_2027_HK_Leave.ics`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('📥 已下載 iCal 行事曆檔案！');
+    }
+
+    async function captureZenCalendarCanvas() {
+      const calendarEl = document.getElementById('calendarContainer');
+      
+      const calCanvas = await html2canvas(calendarEl, {
+        scale: 3,
+        backgroundColor: '#fafbfc',
+        useCORS: true,
+        logging: false
+      });
+
+      const contentWidth = calCanvas.width;
+      const contentHeight = calCanvas.height;
+
+      const paddingX = Math.round(contentWidth * 0.05);
+      const targetWidth = contentWidth + (paddingX * 2);
+      const targetHeight = Math.round(targetWidth * (16 / 9));
+
+      const outCanvas = document.createElement('canvas');
+      outCanvas.width = targetWidth;
+      outCanvas.height = Math.max(targetHeight, contentHeight + Math.round(targetWidth * 0.28));
+      const ctx = outCanvas.getContext('2d');
+
+      ctx.fillStyle = '#fafbfc';
+      ctx.fillRect(0, 0, outCanvas.width, outCanvas.height);
+
+      const titleY = Math.round(targetWidth * 0.09);
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '900 ' + Math.round(targetWidth * 0.065) + 'px "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('2027 香港假期管理', paddingX, titleY);
+
+      // 已取消原先在此處繪製的「香港假期全覽」字樣
+
+      ctx.textAlign = 'right';
+      ctx.font = 'bold ' + Math.round(targetWidth * 0.032) + 'px monospace';
+      ctx.fillStyle = '#3b82f6';
+      ctx.fillText('ROOM: ' + currentRoom, outCanvas.width - paddingX, titleY);
+
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = Math.max(1, Math.round(targetWidth * 0.002));
+      ctx.beginPath();
+      ctx.moveTo(paddingX, titleY + Math.round(targetWidth * 0.03));
+      ctx.lineTo(outCanvas.width - paddingX, titleY + Math.round(targetWidth * 0.03));
+      ctx.stroke();
+
+      const calendarStartY = titleY + Math.round(targetWidth * 0.06);
+      ctx.drawImage(calCanvas, paddingX, calendarStartY);
+
+      const legendY = calendarStartY + contentHeight + Math.round(targetWidth * 0.05);
+      
+      ctx.beginPath();
+      ctx.moveTo(paddingX, legendY - Math.round(targetWidth * 0.035));
+      ctx.lineTo(outCanvas.width - paddingX, legendY - Math.round(targetWidth * 0.035));
+      ctx.stroke();
+
+      ctx.textAlign = 'center';
+      ctx.font = 'bold ' + Math.round(targetWidth * 0.032) + 'px "Noto Sans TC", sans-serif';
+      ctx.fillStyle = '#475569';
+      ctx.fillText('🔵 AL (年假)     🟣 WB (假)     ⚪ S (特假)     🟢 BL (生日)', outCanvas.width / 2, legendY);
+
+      return outCanvas;
+    }
+
+    async function handleShareZenImage() {
+      try {
+        const canvas = await captureZenCalendarCanvas();
+        canvas.toBlob(async (blob) => {
+          if (!blob) return;
+          const file = new File([blob], `2027_HK_Leave_9x16_${currentRoom}.png`, { type: 'image/png' });
+
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: `2027 香港假期管理 (${currentRoom})`,
+              text: `這是我的 2027 香港假期排程！`,
+              files: [file]
+            });
+          } else {
+            const imageURL = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = `2027_HK_Leave_9x16_${currentRoom}.png`;
+            link.href = imageURL;
+            link.click();
+          }
+        }, 'image/png');
+      } catch (err) {}
+    }
+
+    function setupYearOverviewToggle() {
+      const btnToggle = document.getElementById('btnToggleYearView');
+      const btnExitTop = document.getElementById('btnExitYearViewTop');
+      const btnOverviewLock = document.getElementById('btnOverviewToggleLock');
+      const btnEnterZen = document.getElementById('btnEnterZenMode');
+      const btnExitZenCircle = document.getElementById('btnExitZenCircle');
+
+      if (btnToggle) {
+        btnToggle.onclick = () => {
+          document.body.classList.remove('zen-fullscreen-mode');
+          document.body.classList.add('year-overview-mode');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+      }
+      if (btnExitTop) {
+        btnExitTop.onclick = () => {
+          document.body.classList.remove('year-overview-mode');
+          document.body.classList.remove('zen-fullscreen-mode');
+        };
+      }
+      if (btnOverviewLock) {
+        btnOverviewLock.onclick = () => {
+          toggleGlobalEditMode();
+        };
+      }
+      
+      if (btnEnterZen) {
+        btnEnterZen.onclick = () => {
+          document.body.classList.remove('year-overview-mode');
+          document.body.classList.add('zen-fullscreen-mode');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+      }
+      
+      if (btnExitZenCircle) {
+        btnExitZenCircle.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          document.body.classList.remove('zen-fullscreen-mode');
+          document.body.classList.add('year-overview-mode');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+      }
+
+      const btnShareImg = document.getElementById('btnShareZenImage');
+      if (btnShareImg) btnShareImg.onclick = handleShareZenImage;
+    }
+
+    function toggleGlobalEditMode() {
+      isEditMode = !isEditMode;
+      const btn = document.getElementById('btnToggleGlobalLock');
+      const text = document.getElementById('globalLockText');
+      const icon = document.getElementById('globalLockIcon');
+      const overviewLockBtn = document.getElementById('btnOverviewToggleLock');
+
+      if (isEditMode) {
+        document.body.classList.remove('readonly-mode');
+        btn.className = 'w-7 h-7 md:w-auto md:h-auto md:px-2.5 md:py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1 transition shadow-2xs animate-pulse';
+        if (text) text.textContent = '編輯中';
+        icon.className = 'fa-solid fa-pen text-white text-xs';
+        if (overviewLockBtn) {
+          overviewLockBtn.className = 'px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 bg-amber-500 text-white';
+          overviewLockBtn.innerHTML = '<i class="fa-solid fa-pen"></i> 編輯中';
+        }
+        showToast('✏️ 已開啟編輯模式：點擊日子可依「全日➔AM➔PM➔清除」循環切換！');
+      } else {
+        document.body.classList.add('readonly-mode');
+        btn.className = 'w-7 h-7 md:w-auto md:h-auto md:px-2.5 md:py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold rounded-lg text-xs flex items-center justify-center gap-1 transition shadow-2xs';
+        if (text) text.textContent = '唯讀';
+        icon.className = 'fa-solid fa-lock text-slate-500 text-xs';
+        if (overviewLockBtn) {
+          overviewLockBtn.className = 'px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 bg-slate-100 text-slate-700 border border-slate-300';
+          overviewLockBtn.innerHTML = '<i class="fa-solid fa-lock text-slate-500"></i> 唯讀';
+        }
+        showToast('🔒 已恢復唯讀模式');
+      }
+    }
+
+    function openResetModal() {
+      const allKeys = Object.keys(leaveData);
+      if (allKeys.length === 0) {
+        showToast('💡 目前沒有任何請假紀錄。');
+        return;
+      }
+
+      const lockedCount = allKeys.filter(d => leaveData[d] && leaveData[d].locked).length;
+      const unlockedCount = allKeys.length - lockedCount;
+
+      const modal = document.getElementById('modalResetConfirm');
+      const header = document.getElementById('resetModalHeader');
+      const icon = document.getElementById('resetModalIcon');
+      const title = document.getElementById('resetModalTitle');
+      const subtitle = document.getElementById('resetModalSubtitle');
+      const stats = document.getElementById('resetStatsContainer');
+      const desc = document.getElementById('resetModalDesc');
+      const btnSafe = document.getElementById('btnConfirmSafeReset');
+      const btnForce = document.getElementById('btnConfirmForceReset');
+
+      document.getElementById('resetCountLocked').textContent = `${lockedCount} 日`;
+      document.getElementById('resetCountUnlocked').textContent = `${unlockedCount} 日`;
+
+      if (lockedCount > 0) {
+        header.className = 'p-3.5 border-b border-slate-100 flex items-center gap-2.5 bg-amber-50';
+        icon.className = 'w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center text-base shadow-xs shrink-0';
+        icon.innerHTML = '<i class="fa-solid fa-shield-halved"></i>';
+        title.textContent = '發現受保護的鎖定假期';
+        subtitle.textContent = `偵測到 ${lockedCount} 個日子已加鎖保護 🔒`;
+        stats.classList.remove('hidden');
+        desc.innerHTML = `請選擇處理方式：你可以<b>僅清除未鎖定假期</b>以保留關鍵日程，或<b>強制全部清除</b>。`;
+        btnSafe.classList.remove('hidden');
+        btnForce.classList.remove('hidden');
+      } else {
+        header.className = 'p-3.5 border-b border-slate-100 flex items-center gap-2.5 bg-red-50';
+        icon.className = 'w-9 h-9 rounded-xl bg-red-500 text-white flex items-center justify-center text-base shadow-xs shrink-0';
+        icon.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
+        title.textContent = '清除所有請假紀錄';
+        subtitle.textContent = `目前共有 ${allKeys.length} 筆假期資料`;
+        stats.classList.add('hidden');
+        desc.innerHTML = `確定要清空目前房間（<b>${currentRoom}</b>）的所有請假紀錄嗎？清空後將無法復原。`;
+        btnSafe.classList.add('hidden');
+        btnForce.classList.remove('hidden');
+        btnForce.innerHTML = '<i class="fa-solid fa-trash-can"></i><span>確認清除所有請假紀錄</span>';
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeResetModal() {
+      document.getElementById('modalResetConfirm').classList.add('hidden');
+    }
+
+    function openExportModal() {
+      if (!isRoomUnlocked) {
+        showUnlockModal();
+        return;
+      }
+      const allKeys = Object.keys(leaveData).filter(d => leaveData[d] && (leaveData[d].am || leaveData[d].pm));
+      if (allKeys.length === 0) {
+        showToast('💡 目前沒有任何請假紀錄可供匯出！');
+        return;
+      }
+      document.getElementById('exportRoomLabel').textContent = currentRoom;
+      document.getElementById('exportCountLabel').textContent = `${allKeys.length} 筆`;
+      document.getElementById('modalExportIcal').classList.remove('hidden');
+    }
+
+    function closeExportModal() {
+      document.getElementById('modalExportIcal').classList.add('hidden');
+    }
+
+    function openResetPinModal() {
+      document.getElementById('resetPinRoomLabel').textContent = currentRoom;
+      document.getElementById('inputAdminKey').value = '';
+      const err = document.getElementById('adminKeyErrorMsg');
+      err.classList.add('hidden');
+      err.textContent = '';
+      document.getElementById('modalResetPinAdmin').classList.remove('hidden');
+    }
+
+    function closeResetPinModal() {
+      document.getElementById('modalResetPinAdmin').classList.add('hidden');
+    }
+
+    const TRIP_CANDIDATES = [
+      { id: 'newyear_4d', month: 1, name: '元旦跨年連假', range: '1月1日 - 1月4日', totalDays: 4, alCost: 1, dates: ['2027-01-04'], desc: '請1日放4日（元旦週五＋週末＋周一）' },
+      { id: 'cny_11d', month: 2, name: '農曆新年超級黃金週', range: '2月4日 - 2月14日', totalDays: 11, alCost: 5, dates: ['2027-02-04', '2027-02-05', '2027-02-10', '2027-02-11', '2027-02-12'], desc: '請5日放11日（年廿八出發連放至初八）' },
+      { id: 'cny_9d', month: 2, name: '農曆新年黃金週', range: '2月6日 - 2月14日', totalDays: 9, alCost: 3, dates: ['2027-02-10', '2027-02-11', '2027-02-12'], desc: '請3日放9日（初一至初四紅日＋雙週末）' },
+      { id: 'cny_6d', month: 2, name: '農曆新年早鳥假', range: '2月4日 - 2月9日', totalDays: 6, alCost: 2, dates: ['2027-02-04', '2027-02-05'], desc: '請2日放6日（年廿八出發連新春紅日）' },
+      { id: 'easter_chingming_11d', month: 3, name: '復活節＋清明節特長假', range: '3月26日 - 4月5日', totalDays: 11, alCost: 4, dates: ['2027-03-30', '2027-03-31', '2027-04-01', '2027-04-02'], desc: '請4日放11日（復活節連清明超級長假）' },
+      { id: 'easter_5d', month: 3, name: '復活節短途假期', range: '3月25日 - 3月29日', totalDays: 5, alCost: 1, dates: ['2027-03-25'], desc: '請1日放5日（連受難節＋復活節）' },
+      { id: 'chingming_4d', month: 4, name: '清明初春連假', range: '4月2日 - 4月5日', totalDays: 4, alCost: 1, dates: ['2027-04-02'], desc: '請1日放4日（連清明補假及週末）' },
+      { id: 'buddha_4d', month: 5, name: '佛誕初夏遊', range: '5月13日 - 5月16日', totalDays: 4, alCost: 1, dates: ['2027-05-14'], desc: '請1日放4日（佛誕四連周五及週末）' },
+      { id: 'buddha_9d', month: 5, name: '佛誕深度縱橫遊', range: '5月8日 - 5月16日', totalDays: 9, alCost: 4, dates: ['2027-05-10', '2027-05-11', '2027-05-12', '2027-05-14'], desc: '請4日放9日（前後跨雙週末連佛誕）' },
+      { id: 'dragon_5d', month: 6, name: '端午節消暑遊', range: '6月9日 - 6月13日', totalDays: 5, alCost: 2, dates: ['2027-06-10', '2027-06-11'], desc: '請2日放5日（端午三連周四五週末）' },
+      { id: 'dragon_9d', month: 6, name: '端午盛夏長假', range: '6月5日 - 6月13日', totalDays: 9, alCost: 4, dates: ['2027-06-07', '2027-06-08', '2027-06-10', '2027-06-11'], desc: '請4日放9日（跨雙週末連端午）' },
+      { id: 'hksar_4d', month: 7, name: '七一回歸連假', range: '7月1日 - 7月4日', totalDays: 4, alCost: 1, dates: ['2027-07-02'], desc: '請1日放4日（七一四連周五及週末）' },
+      { id: 'midautumn_4d', month: 9, name: '中秋賞月假期', range: '9月16日 - 9月19日', totalDays: 4, alCost: 1, dates: ['2027-09-17'], desc: '請1日放4日（中秋翌日四連周五週末）' },
+      { id: 'national_chungyeung_10d', month: 10, name: '國慶＋重陽秋季長假', range: '10月1日 - 10月10日', totalDays: 10, alCost: 4, dates: ['2027-10-04', '2027-10-05', '2027-10-06', '2027-10-07'], desc: '請4日放10日（國慶連重陽雙紅日跨週）' },
+      { id: 'national_4d', month: 10, name: '國慶秋日短遊', range: '10月1日 - 10月4日', totalDays: 4, alCost: 1, dates: ['2027-10-04'], desc: '請1日放4日（國慶五連週末及周一）' },
+      { id: 'chungyeung_4d', month: 10, name: '重陽秋高氣爽遊', range: '10月7日 - 10月10日', totalDays: 4, alCost: 1, dates: ['2027-10-07'], desc: '請1日放4日（請周四連重陽五及週末）' },
+      { id: 'xmas_9d', month: 12, name: '聖誕跨年狂歡長假', range: '12月25日 - 2028年1月2日', totalDays: 9, alCost: 4, dates: ['2027-12-28', '2027-12-29', '2027-12-30', '2027-12-31'], desc: '請4日放9日（聖誕補假連跨年紅日）' },
+      { id: 'xmas_4d', month: 12, name: '聖誕冬日小旅行', range: '12月24日 - 12月27日', totalDays: 4, alCost: 1, dates: ['2027-12-24'], desc: '請1日平安夜放4日（連聖誕及補假）' },
+      { id: 'short_jan_3d', month: 1, name: '一月冬日微旅行', range: '1月15日 - 1月17日', totalDays: 3, alCost: 1, dates: ['2027-01-15'], desc: '請週五放3日週末快閃' },
+      { id: 'short_mar_3d', month: 3, name: '三月初春週末漫步', range: '3月12日 - 3月14日', totalDays: 3, alCost: 1, dates: ['2027-03-12'], desc: '請週五放3日悠閒小充電' },
+      { id: 'short_apr_3d', month: 4, name: '四月穀雨小假期', range: '4月16日 - 4月18日', totalDays: 3, alCost: 1, dates: ['2027-04-16'], desc: '請週五放3日避靜小週末' },
+      { id: 'short_may_3d', month: 5, name: '五月小滿放空遊', range: '5月21日 - 5月23日', totalDays: 3, alCost: 1, dates: ['2027-05-21'], desc: '請週五放3日避暑微旅行' },
+      { id: 'short_jun_3d', month: 6, name: '六月夏日週末小散心', range: '6月25日 - 6月27日', totalDays: 3, alCost: 1, dates: ['2027-06-25'], desc: '請週五放3日看海避暑' },
+      { id: 'short_jul_3d', month: 7, name: '七月盛夏快閃之旅', range: '7月16日 - 7月18日', totalDays: 3, alCost: 1, dates: ['2027-07-16'], desc: '請週五放3日放鬆充電' },
+      { id: 'short_aug_3d', month: 8, name: '八月立秋清涼小週末', range: '8月13日 - 8月15日', totalDays: 3, alCost: 1, dates: ['2027-08-13'], desc: '請週五放3日舒心秋意遊' },
+      { id: 'short_nov_3d', month: 11, name: '十一月初冬露營微假', range: '11月19日 - 11月21日', totalDays: 3, alCost: 1, dates: ['2027-11-19'], desc: '請週五放3日登高郊遊散步' }
+    ];
+
+    function openTravelModeModal() {
+      if (!isRoomUnlocked) {
+        showUnlockModal();
+        return;
+      }
+      const modal = document.getElementById('modalTravelMode');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeTravelModeModal() {
+      const modal = document.getElementById('modalTravelMode');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function calculateSpacingScore(combo) {
+      const months = combo.trips.map(t => t.month).sort((a, b) => a - b);
+      if (months.length <= 1) return 100;
+
+      let consecutiveMonths = 0;
+      let minGap = 12;
+
+      for (let i = 0; i < months.length - 1; i++) {
+        const gap = months[i + 1] - months[i];
+        if (gap === 1) consecutiveMonths++;
+        if (gap < minGap) minGap = gap;
+      }
+
+      const quartersCovered = new Set(months.map(m => Math.floor((m - 1) / 3))).size;
+      return (quartersCovered * 100) + (minGap * 30) - (consecutiveMonths * 1000);
+    }
+
+        function renderMiniYearPreview(combo) {
+      const container = document.getElementById('fbMiniYearGrid');
+      if (!container) return;
+      container.innerHTML = '';
+
+      const newLeaveDates = new Set();
+      if (combo && combo.trips) {
+        combo.trips.forEach(t => {
+          if (t.dates) t.dates.forEach(d => newLeaveDates.add(d));
+        });
+      }
+
+      const monthNamesEn = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+      for (let m = 0; m < 12; m++) {
+        const monthCard = document.createElement('div');
+        monthCard.className = 'bg-white p-1 md:p-1.5 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col justify-between';
+
+        const firstDay = new Date(2027, m, 1).getDay();
+        const daysInMonth = new Date(2027, m + 1, 0).getDate();
+
+        let daysHtml = `
+          <div class="flex items-center justify-between pb-0.5 mb-1 border-b border-slate-100">
+            <span class="font-extrabold text-[10px] md:text-[11px] text-slate-800">${m + 1}月</span>
+            <span class="text-[7px] md:text-[8px] font-bold text-slate-400">${monthNamesEn[m]}</span>
+          </div>
+          <div class="grid grid-cols-7 gap-0.5 text-center">
+        `;
+
+        for (let b = 0; b < firstDay; b++) {
+          daysHtml += `<div class="h-3 md:h-3.5"></div>`;
+        }
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dateStr = `2027-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          const dayOfWeek = (firstDay + d - 1) % 7;
+          const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+          const isHoliday = HK_HOLIDAYS_2027[dateStr];
+          const isSundayHoliday = SUNDAY_HOLIDAYS_PINK.includes(dateStr);
+          const isLocked = leaveData[dateStr] && leaveData[dateStr].locked;
+          const isNewAl = newLeaveDates.has(dateStr);
+
+          let cellClass = 'bg-slate-50 text-slate-500';
+          if (isNewAl) {
+            cellClass = 'bg-blue-600 text-white font-black rounded-xs shadow-2xs ring-1 ring-blue-400 animate-in fade-in zoom-in-75 duration-150';
+          } else if (isLocked) {
+            cellClass = 'bg-amber-400 text-amber-950 font-black rounded-xs ring-1 ring-amber-300';
+          } else if (isSundayHoliday || isHoliday) {
+            cellClass = 'bg-orange-100 text-orange-700 font-bold rounded-xs';
+          } else if (isWeekend) {
+            // 星期六、日改用淺粉紅色
+            cellClass = 'bg-rose-50/80 text-rose-500 font-semibold rounded-xs border border-rose-100/60';
+          }
+
+          daysHtml += `<div class="mini-cal-cell h-3 md:h-3.5 flex items-center justify-center text-[7px] md:text-[7.5px] select-none transition-all duration-100 ${cellClass}" data-date="${dateStr}" title="${dateStr}">${d}</div>`;
+        }
+
+        daysHtml += `</div>`;
+        monthCard.innerHTML = daysHtml;
+        container.appendChild(monthCard);
+      }
+    }
+
+    function setMiniCalendarHighlight(dates, isHighlight) {
+      if (!dates) return;
+      dates.forEach(d => {
+        const el = document.querySelector(`.mini-cal-cell[data-date="${d}"]`);
+        if (el) {
+          if (isHighlight) {
+            el.classList.add('ring-2', 'ring-indigo-500', 'scale-125', 'z-10');
+          } else {
+            el.classList.remove('ring-2', 'ring-indigo-500', 'scale-125', 'z-10');
+          }
+        }
+      });
+    }
+
+    function syncSchemeTabUI(mode) {
+      const schemes = ['max', 'casual', 'minimal'];
+      schemes.forEach(s => {
+        const btn = document.getElementById(`fbSchemeBtn-${s}`);
+        if (!btn) return;
+        if (s === mode) {
+          btn.className = 'fb-scheme-tab py-1.5 px-1 rounded-xl text-[11px] md:text-xs font-black transition flex items-center justify-center gap-1 active:scale-95 bg-white text-indigo-950 shadow-sm ring-1 ring-white/50';
+        } else {
+          btn.className = 'fb-scheme-tab py-1.5 px-1 rounded-xl text-[11px] md:text-xs font-bold transition flex items-center justify-center gap-1 active:scale-95 text-white/80 hover:text-white hover:bg-white/10';
+        }
+      });
+    }
+
+    function renderFlightBoardModal(combo, modeTitle, availableAl) {
+      currentGeneratedCombo = combo;
+      const modal = document.getElementById('modalFlightBoard');
+      
+      document.getElementById('fbModeBadge').textContent = modeTitle;
+      document.getElementById('fbKpiTotalDays').textContent = `放 ${combo.totalDays} 日`;
+      document.getElementById('fbKpiAlCost').textContent = `請 ${combo.totalAl} 日 AL`;
+      
+      const usagePct = ((combo.totalAl / availableAl) * 100).toFixed(1);
+      document.getElementById('fbKpiUsageRate').textContent = `${usagePct}%`;
+
+      syncSchemeTabUI(currentTravelMode);
+
+      const listContainer = document.getElementById('fbTripListContainer');
+      listContainer.innerHTML = '';
+
+      combo.trips.forEach((t, idx) => {
+        const card = document.createElement('div');
+        card.className = 'trip-card-item bg-white rounded-2xl p-2.5 sm:p-3 md:p-3.5 border border-slate-200/90 shadow-2xs hover:border-indigo-400 hover:shadow-xs transition flex items-center gap-2.5 md:gap-3.5 cursor-pointer';
+        card.innerHTML = `
+          <div class="w-11 h-11 md:w-12 md:h-12 rounded-2xl bg-indigo-600 text-white flex flex-col items-center justify-center shrink-0 shadow-sm border border-indigo-700">
+            <span class="text-sm md:text-base font-black leading-none">${t.month}月</span>
+            <span class="text-[8px] md:text-[9px] uppercase font-bold text-indigo-200 mt-0.5 tracking-wider">假期</span>
+          </div>
+
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between gap-1 mb-1">
+              <h4 class="font-black text-slate-900 text-xs md:text-sm truncate">
+                <span class="text-indigo-600 mr-1">#${idx + 1}</span>【${t.name}】
+              </h4>
+              <div class="flex items-center gap-1 shrink-0">
+                <span class="px-1.5 md:px-2 py-0.5 bg-amber-100 text-amber-900 rounded-md font-black text-[9px] md:text-[10px] border border-amber-200">
+                  放 ${t.totalDays} 日
+                </span>
+                <span class="px-1.5 md:px-2 py-0.5 bg-sky-100 text-sky-800 rounded-md font-bold text-[9px] md:text-[10px] border border-sky-200">
+                  請 ${t.alCost} 日 AL
+                </span>
+              </div>
+            </div>
+
+            <div class="text-[10px] md:text-[11px] font-bold text-slate-700 flex items-center gap-1.5 mb-0.5">
+              <i class="fa-regular fa-calendar-check text-indigo-500 text-[10px]"></i>
+              <span>${t.range}</span>
+            </div>
+            <p class="text-[9px] md:text-[10px] text-slate-500 font-medium truncate">
+              ${t.desc}
+            </p>
+          </div>
+        `;
+
+        card.onmouseenter = () => setMiniCalendarHighlight(t.dates, true);
+        card.onmouseleave = () => setMiniCalendarHighlight(t.dates, false);
+
+        listContainer.appendChild(card);
+      });
+
+      // 同時渲染 12 個月微型年曆熱力預覽圖 (六日淺紅標記)
+      renderMiniYearPreview(combo);
+
+      modal.classList.remove('hidden');
+    }
+
+    function executeTravelVacation(mode = 'max') {
+      currentTravelMode = mode;
+      closeTravelModeModal();
+
+      let nonTravelAlUsed = 0;
+      for (const d in leaveData) {
+        const item = leaveData[d];
+        if (item && (!item.note || !item.note.includes('旅遊假期'))) {
+          if (item.am === 'annual') nonTravelAlUsed += 0.5;
+          if (item.pm === 'annual') nonTravelAlUsed += 0.5;
+        }
+      }
+
+      const availableAl = Math.max(0, annualQuota - nonTravelAlUsed);
+      lastAvailableAl = availableAl;
+
+      if (availableAl < 1) {
+        showToast(`⚠️ 目前可用的 AL 配額不足（剩餘 ${availableAl.toFixed(1)} 日）`);
+        return;
+      }
+
+      let pool = (mode === 'minimal' || mode === 'casual') ? [...TRIP_CANDIDATES] : TRIP_CANDIDATES.filter(t => t.totalDays >= 4);
+
+      let minTargetAl = 0;
+      let maxTargetAl = availableAl;
+      let modeTitle = '';
+
+      if (mode === 'max') {
+        minTargetAl = availableAl;
+        maxTargetAl = availableAl;
+        modeTitle = '🚀 全額連假（100% 用盡）';
+      } else if (mode === 'casual') {
+        minTargetAl = Math.max(1, Math.round(availableAl * 0.6));
+        maxTargetAl = Math.min(availableAl, Math.max(minTargetAl, Math.round(availableAl * 0.8)));
+        modeTitle = '☕ 靈活連假（60%~80% AL · 以量為先）';
+      } else if (mode === 'minimal') {
+        minTargetAl = Math.max(1, Math.round(availableAl * 0.4));
+        maxTargetAl = Math.min(availableAl, Math.max(minTargetAl, Math.round(availableAl * 0.6)));
+        modeTitle = '🌿 輕量連假（40%~60% AL · 週末微休）';
+      }
+
+      let inRangeCombos = [];
+      let allValidCombos = [];
+
+      function searchCombos(candidatePool, startIndex, currentTrips, currentAl, usedMonths, usedDates) {
+        if (currentAl <= availableAl) {
+          if (currentTrips.length > 0) {
+            const comboObj = {
+              trips: [...currentTrips],
+              totalAl: currentAl,
+              totalDays: currentTrips.reduce((acc, t) => acc + t.totalDays, 0),
+              tripCount: currentTrips.length
+            };
+            allValidCombos.push(comboObj);
+
+            let meetsTripCount = true;
+            if (mode === 'casual') {
+              // 隨心模式：目標 3-4 個，上限 8 個假期（下限 3 個）
+              meetsTripCount = currentTrips.length >= 3 && currentTrips.length <= 8;
+            }
+
+            if (meetsTripCount && currentAl >= minTargetAl && currentAl <= maxTargetAl) {
+              inRangeCombos.push(comboObj);
+            }
+          }
+        }
+        if (currentAl >= availableAl) return;
+
+        for (let i = startIndex; i < candidatePool.length; i++) {
+          const t = candidatePool[i];
+          if (usedMonths.has(t.month)) continue;
+          if (t.dates.some(d => usedDates.has(d))) continue;
+          if (currentAl + t.alCost > availableAl) continue;
+
+          usedMonths.add(t.month);
+          t.dates.forEach(d => usedDates.add(d));
+          currentTrips.push(t);
+
+          searchCombos(candidatePool, i + 1, currentTrips, currentAl + t.alCost, usedMonths, usedDates);
+
+          currentTrips.pop();
+          t.dates.forEach(d => usedDates.delete(d));
+          usedMonths.delete(t.month);
+        }
+      }
+
+      searchCombos(pool, 0, [], 0, new Set(), new Set());
+
+      if (mode === 'max' && inRangeCombos.length === 0 && pool.length !== TRIP_CANDIDATES.length) {
+        allValidCombos = [];
+        inRangeCombos = [];
+        searchCombos(TRIP_CANDIDATES, 0, [], 0, new Set(), new Set());
+      }
+
+      // 隨心模式：若嚴格 3-8 個無解（例如可用 AL 很低），容許從 allValidCombos 挑選
+      if (mode === 'casual' && inRangeCombos.length === 0) {
+        allValidCombos.forEach(c => {
+          if (c.currentAl >= minTargetAl && c.totalAl <= maxTargetAl && c.tripCount <= 8) {
+            inRangeCombos.push(c);
+          }
+        });
+      }
+
+      let chosenCombo = null;
+
+      if (inRangeCombos.length > 0) {
+        inRangeCombos.forEach(c => { 
+          c.spacingScore = calculateSpacingScore(c); 
+          if (mode === 'casual') {
+            // 目標 3-4 個假期的加權獎勵
+            let targetBonus = (c.tripCount >= 3 && c.tripCount <= 4) ? 300 : 0;
+            // 以量為先：假期段數愈多加分、總放假天數愈多加分
+            c.finalScore = c.spacingScore + targetBonus + (c.tripCount * 80) + (c.totalDays * 15);
+          } else {
+            c.finalScore = c.spacingScore;
+          }
+        });
+
+        inRangeCombos.sort((a, b) => b.finalScore - a.finalScore);
+        const maxScore = inRangeCombos[0].finalScore;
+        const topPool = inRangeCombos.filter(c => c.finalScore >= maxScore - 50);
+        chosenCombo = topPool[Math.floor(Math.random() * topPool.length)];
+      } else if (mode === 'max') {
+        allValidCombos.forEach(c => { c.spacingScore = calculateSpacingScore(c); });
+        allValidCombos.sort((a, b) => b.totalAl - a.totalAl || b.spacingScore - a.spacingScore);
+        if (allValidCombos.length > 0) {
+          const maxAlVal = allValidCombos[0].totalAl;
+          const topAlPool = allValidCombos.filter(c => c.totalAl === maxAlVal);
+          const maxScore = Math.max(...topAlPool.map(c => c.spacingScore));
+          const topSpacingPool = topAlPool.filter(c => c.spacingScore >= maxScore - 30);
+          chosenCombo = topSpacingPool[Math.floor(Math.random() * topSpacingPool.length)];
+        }
+      } else {
+        const midTarget = (minTargetAl + maxTargetAl) / 2;
+        allValidCombos.forEach(c => { c.spacingScore = calculateSpacingScore(c); });
+        allValidCombos.sort((a, b) => Math.abs(a.totalAl - midTarget) - Math.abs(b.totalAl - midTarget) || b.spacingScore - a.spacingScore);
+        if (allValidCombos.length > 0) chosenCombo = allValidCombos[0];
+      }
+
+      if (!chosenCombo || chosenCombo.trips.length === 0) {
+        showToast('⚠️ 無法找到符合規則的假期組合！');
+        return;
+      }
+
+      renderFlightBoardModal(chosenCombo, modeTitle, availableAl);
+    }
+
+        function initFlightBoardEvents() {
+      const modal = document.getElementById('modalFlightBoard');
+      const closeBtn = document.getElementById('btnCloseFlightBoard');
+      const cancelBtn = document.getElementById('btnFbCancel');
+      const regenBtn = document.getElementById('btnFbRegenerate');
+      const applyBtn = document.getElementById('btnFbApply');
+
+      const tabList = document.getElementById('fbTabList');
+      const tabCalendar = document.getElementById('fbTabCalendar');
+      const tripListContainer = document.getElementById('fbTripListContainer');
+      const calendarPreviewContainer = document.getElementById('fbCalendarPreviewContainer');
+
+      // 方案 A/B/C 快速切換按鈕綁定
+      const btnSchemeMax = document.getElementById('fbSchemeBtn-max');
+      const btnSchemeCasual = document.getElementById('fbSchemeBtn-casual');
+      const btnSchemeMinimal = document.getElementById('fbSchemeBtn-minimal');
+
+      if (btnSchemeMax) {
+        btnSchemeMax.onclick = () => {
+          executeTravelVacation('max');
+        };
+      }
+      if (btnSchemeCasual) {
+        btnSchemeCasual.onclick = () => {
+          executeTravelVacation('casual');
+        };
+      }
+      if (btnSchemeMinimal) {
+        btnSchemeMinimal.onclick = () => {
+          executeTravelVacation('minimal');
+        };
+      }
+
+      // 手機分頁切換：使用 max-lg:hidden，保證螢幕放大到電腦版 (>= 1024px) 時兩側同時完美顯示！
+      if (tabList && tabCalendar) {
+        tabList.onclick = () => {
+          tabList.className = 'flex-1 py-1 rounded-lg bg-white text-indigo-700 shadow-2xs transition flex items-center justify-center gap-1.5 font-bold';
+          tabCalendar.className = 'flex-1 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition flex items-center justify-center gap-1.5 font-medium';
+          tripListContainer.classList.remove('max-lg:hidden');
+          calendarPreviewContainer.classList.add('max-lg:hidden');
+        };
+
+        tabCalendar.onclick = () => {
+          tabCalendar.className = 'flex-1 py-1 rounded-lg bg-white text-indigo-700 shadow-2xs transition flex items-center justify-center gap-1.5 font-bold';
+          tabList.className = 'flex-1 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition flex items-center justify-center gap-1.5 font-medium';
+          tripListContainer.classList.add('max-lg:hidden');
+          calendarPreviewContainer.classList.remove('max-lg:hidden');
+        };
+      }
+
+      const hideModal = () => {
+        modal.classList.add('hidden');
+        // 重設手機分頁為預設清單模式
+        if (tabList && tabCalendar && tripListContainer && calendarPreviewContainer) {
+          tabList.className = 'flex-1 py-1 rounded-lg bg-white text-indigo-700 shadow-2xs transition flex items-center justify-center gap-1.5 font-bold';
+          tabCalendar.className = 'flex-1 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition flex items-center justify-center gap-1.5 font-medium';
+          tripListContainer.classList.remove('max-lg:hidden');
+          calendarPreviewContainer.classList.add('max-lg:hidden');
+        }
+      };
+
+      if (closeBtn) closeBtn.onclick = hideModal;
+      if (cancelBtn) cancelBtn.onclick = hideModal;
+
+      if (regenBtn) {
+        regenBtn.onclick = () => {
+          // 原地重抽當前方案，按鈕位置完全固定不晃動
+          executeTravelVacation(currentTravelMode);
+        };
+      }
+
+      if (applyBtn) {
+        applyBtn.onclick = () => {
+          if (!currentGeneratedCombo) return;
+
+          for (const d in leaveData) {
+            if (leaveData[d] && leaveData[d].note && leaveData[d].note.includes('旅遊假期') && !leaveData[d].locked) {
+              delete leaveData[d];
+            }
+          }
+
+          currentGeneratedCombo.trips.forEach(t => {
+            t.dates.forEach(d => {
+              if (!leaveData[d] || !leaveData[d].locked) {
+                leaveData[d] = {
+                  am: 'annual',
+                  pm: 'annual',
+                  note: `旅遊假期: ${t.name}`,
+                  locked: false
+                };
+              }
+            });
+          });
+
+          pushData();
+          renderMonthGrid();
+          updateDashboard();
+          hideModal();
+
+          if (typeof showLeavesTab === 'function') {
+            showLeavesTab();
+          }
+          showToast('✨ 假期助手方案已成功套用！');
+        };
+      }
+    }
+
+    function syncActiveBrushUI() {
+      const capsuleConfigs = {
+        annual: {
+          active: 'border-blue-500 bg-blue-100/90 text-blue-900 ring-1 ring-blue-400 shadow-2xs font-bold',
+          inactive: 'border-blue-200 bg-blue-50/70 text-blue-800 font-semibold'
+        },
+        wb: {
+          active: 'border-purple-500 bg-purple-100/90 text-purple-900 ring-1 ring-purple-400 shadow-2xs font-bold',
+          inactive: 'border-purple-200 bg-purple-50/70 text-purple-800 font-semibold'
+        },
+        special: {
+          active: 'border-slate-500 bg-slate-200 text-slate-800 ring-1 ring-slate-400 shadow-2xs font-bold',
+          inactive: 'border-slate-300 bg-slate-100 text-slate-700 font-semibold'
+        },
+        birthday: {
+          active: 'border-emerald-500 bg-emerald-100/90 text-emerald-900 ring-1 ring-emerald-400 shadow-2xs font-bold',
+          inactive: 'border-emerald-200 bg-emerald-50/70 text-emerald-800 font-semibold'
+        }
+      };
+
+      document.querySelectorAll('.brush-capsule').forEach(cap => {
+        const b = cap.getAttribute('data-brush');
+        const cfg = capsuleConfigs[b];
+        if (!cfg) return;
+
+        cap.className = `brush-capsule px-1.5 py-1 rounded-md border flex items-center justify-between transition active:scale-95 cursor-pointer ${b === activeBrush ? cfg.active : cfg.inactive}`;
+      });
+
+      const eraserBtn = document.getElementById('btnBrushEraser');
+      if (eraserBtn) {
+        if (activeBrush === 'eraser') {
+          eraserBtn.className = 'brush-btn shrink-0 w-10 md:w-16 bg-red-50 border-2 border-red-500 ring-2 ring-red-300 text-red-600 rounded-lg md:rounded-xl shadow-xs flex flex-col items-center justify-center gap-0.5 md:gap-1 transition cursor-pointer select-none';
+        } else {
+          eraserBtn.className = 'brush-btn shrink-0 w-10 md:w-16 bg-white hover:bg-red-50 border border-slate-200 text-slate-500 hover:text-red-600 rounded-lg md:rounded-xl shadow-2xs flex flex-col items-center justify-center gap-0.5 md:gap-1 transition cursor-pointer select-none';
+        }
+      }
+
+      const overviewEraser = document.getElementById('btnOverviewEraser');
+      if (overviewEraser) {
+        if (activeBrush === 'eraser') {
+          overviewEraser.className = 'brush-btn px-2 py-1 bg-red-50 border border-red-500 text-red-600 ring-1 ring-red-400 rounded-md text-[10px] font-bold flex items-center gap-1 shrink-0 transition active:scale-95 cursor-pointer shadow-xs';
+        } else {
+          overviewEraser.className = 'brush-btn px-2 py-1 bg-white hover:bg-red-50 border border-slate-300 text-slate-700 hover:text-red-600 rounded-md text-[10px] font-bold flex items-center gap-1 shrink-0 transition active:scale-95 cursor-pointer shadow-2xs';
+        }
+      }
+
+      const brushConfigs = {
+        annual: {
+          activeClass: 'border-2 border-blue-500 bg-blue-50/70 ring-2 ring-blue-300 shadow-xs',
+          inactiveClass: 'border border-blue-200 bg-white hover:border-blue-400',
+          dotActive: 'bg-blue-600 text-white shadow-xs',
+          dotInactive: 'bg-[#60a5fa]'
+        },
+        wb: {
+          activeClass: 'border-2 border-purple-500 bg-purple-50/70 ring-2 ring-purple-300 shadow-xs',
+          inactiveClass: 'border border-purple-200 bg-white hover:border-purple-400',
+          dotActive: 'bg-purple-600 text-white shadow-xs',
+          dotInactive: 'bg-purple-400'
+        },
+        special: {
+          activeClass: 'border-2 border-slate-500 bg-slate-100 ring-2 ring-slate-300 shadow-xs',
+          inactiveClass: 'border border-slate-200 bg-white hover:border-slate-400',
+          dotActive: 'bg-slate-700 text-white shadow-xs',
+          dotInactive: 'bg-slate-300'
+        },
+        birthday: {
+          activeClass: 'border-2 border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-300 shadow-xs',
+          inactiveClass: 'border border-emerald-200 bg-white hover:border-emerald-400',
+          dotActive: 'bg-emerald-600 text-white shadow-xs',
+          dotInactive: 'bg-[#86efac] border border-emerald-400'
+        }
+      };
+
+      document.querySelectorAll('.brush-card').forEach(card => {
+        const b = card.getAttribute('data-brush');
+        const cfg = brushConfigs[b];
+        if (!cfg) return;
+
+        const badge = document.getElementById(`brushBadge-${b}`);
+
+        card.classList.remove(
+          'border-2', 'border', 'border-blue-500', 'border-purple-500', 'border-slate-500', 'border-emerald-500',
+          'border-blue-200', 'border-purple-200', 'border-slate-200', 'border-emerald-200',
+          'bg-blue-50/70', 'bg-purple-50/70', 'bg-slate-100', 'bg-emerald-50/70', 'bg-white',
+          'ring-2', 'ring-blue-300', 'ring-purple-300', 'ring-slate-300', 'ring-emerald-300',
+          'shadow-xs', 'shadow-2xs'
+        );
+
+        if (b === activeBrush) {
+          cfg.activeClass.split(' ').forEach(cls => card.classList.add(cls));
+          if (badge) {
+            badge.className = `w-3.5 h-3.5 md:w-4 md:h-4 rounded-full flex items-center justify-center transition-all ${cfg.dotActive}`;
+            badge.innerHTML = '<i class="fa-solid fa-check text-[8px] md:text-[9px]"></i>';
+          }
+        } else {
+          cfg.inactiveClass.split(' ').forEach(cls => card.classList.add(cls));
+          if (badge) {
+            badge.className = `w-3.5 h-3.5 md:w-4 md:h-4 rounded-full flex items-center justify-center transition-all ${cfg.dotInactive}`;
+            badge.innerHTML = '';
+          }
+        }
+      });
+    }
+
+    function renderModalLeavesContent() {
+      const modalCount = document.getElementById('modalLeavesCount');
+      const bodyLeaves = document.getElementById('overviewLeavesListBody');
+      if (!bodyLeaves) return;
+
+      const sorted = Object.keys(leaveData).sort();
+      const validDates = sorted.filter(d => leaveData[d] && (leaveData[d].am || leaveData[d].pm));
+      if (modalCount) modalCount.textContent = validDates.length;
+
+      if (validDates.length === 0) {
+        bodyLeaves.innerHTML = `
+          <div class="text-center py-12 text-slate-400">
+            <i class="fa-regular fa-calendar-xmark text-3xl mb-2 text-slate-300"></i>
+            <p class="text-xs">尚無任何請假紀錄</p>
+          </div>
+        `;
+        return;
+      }
+
+      let tableHtml = `
+        <table class="w-full text-xs text-left">
+          <thead class="text-[10px] uppercase bg-slate-100 text-slate-600 sticky top-0 z-10">
+            <tr>
+              <th class="py-1.5 px-2 rounded-l">日期</th>
+              <th class="py-1.5 px-1 text-center">時段</th>
+              <th class="py-1.5 px-1">假別</th>
+              <th class="py-1.5 px-2">備註</th>
+              <th class="py-1.5 px-1 text-right rounded-r">操作</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+      `;
+
+      validDates.forEach(dateStr => {
+        const item = leaveData[dateStr];
+        const getName = (v) => {
+          if (v === 'annual') return 'AL';
+          if (v === 'wb') return 'WB';
+          if (v === 'birthday') return 'BL';
+          if (v === 'special') return 'S';
+          return '';
+        };
+
+        let slotDesc = '', typeDesc = '', badge = '';
+        if (item.am === 'birthday' && item.pm === 'birthday') {
+          slotDesc = '全日'; typeDesc = '🎂 BL 生日假';
+          badge = 'bg-emerald-100 text-emerald-800 border border-emerald-300';
+        } else if (item.am === 'special' && item.pm === 'special') {
+          slotDesc = '全日'; typeDesc = '🛡️ S 特假';
+          badge = 'bg-slate-200 text-slate-700 border border-slate-300';
+        } else if (item.am && item.pm) {
+          if (item.am === item.pm) {
+            slotDesc = '全日';
+            typeDesc = item.am === 'annual' ? 'AL 全日' : 'WB 全日';
+            badge = item.am === 'annual' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700';
+          } else {
+            slotDesc = '混搭';
+            typeDesc = `${getName(item.am)} + ${getName(item.pm)}`;
+            badge = 'bg-indigo-100 text-indigo-700';
+          }
+        } else if (item.am) {
+          slotDesc = 'AM';
+          if (item.am === 'annual') { typeDesc = 'AL AM'; badge = 'bg-blue-100 text-blue-700'; }
+          else if (item.am === 'wb') { typeDesc = 'WB AM'; badge = 'bg-purple-100 text-purple-700'; }
+          else if (item.am === 'special') { typeDesc = 'S AM'; badge = 'bg-slate-200 text-slate-700 border border-slate-300'; }
+          else { typeDesc = 'BL AM'; badge = 'bg-emerald-100 text-emerald-700'; }
+        } else if (item.pm) {
+          slotDesc = 'PM';
+          if (item.pm === 'annual') { typeDesc = 'AL PM'; badge = 'bg-blue-100 text-blue-700'; }
+          else if (item.pm === 'wb') { typeDesc = 'WB PM'; badge = 'bg-purple-100 text-purple-700'; }
+          else if (item.pm === 'special') { typeDesc = 'S PM'; badge = 'bg-slate-200 text-slate-700 border border-slate-300'; }
+          else { typeDesc = 'BL PM'; badge = 'bg-emerald-100 text-emerald-700'; }
+        }
+
+        const lockIcon = item.locked ? '<i class="fa-solid fa-lock text-amber-500 mr-1 text-[10px]" title="已個別鎖定"></i>' : '';
+
+        tableHtml += `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-2 px-2 font-medium text-slate-800 whitespace-nowrap">${lockIcon}${dateStr}</td>
+            <td class="py-2 px-1 text-center"><span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600">${slotDesc}</span></td>
+            <td class="py-2 px-1 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[10px] font-medium ${badge}">${typeDesc}</span></td>
+            <td class="py-2 px-2 text-slate-600">${item.note || '個人假期'}</td>
+            <td class="py-2 px-1 text-right whitespace-nowrap">
+              <button class="modal-delete-btn text-slate-400 hover:text-red-500 transition px-1" data-date="${dateStr}" ${item.locked ? 'disabled title="已鎖定"' : ''}>
+                <i class="fa-solid fa-xmark ${item.locked ? 'opacity-30 cursor-not-allowed' : ''}"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+
+      tableHtml += `</tbody></table>`;
+      bodyLeaves.innerHTML = tableHtml;
+
+      bodyLeaves.querySelectorAll('.modal-delete-btn:not([disabled])').forEach(btn => {
+        btn.onclick = () => {
+          const d = btn.getAttribute('data-date');
+          if (leaveData[d] && leaveData[d].locked) {
+            alert('此日子已受鎖定保護，無法直接刪除！');
+            return;
+          }
+          delete leaveData[d];
+          pushData();
+          renderMonthGrid();
+          updateDashboard();
+          renderModalLeavesContent();
+        };
+      });
+    }
+
+    function openOverviewLeavesModal() {
+      renderModalLeavesContent();
+      const modal = document.getElementById('modalOverviewLeaves');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function setupOverviewTopActionButtons() {
+      const btnOvTrip = document.getElementById('btnOverviewAutoTrip');
+      const btnOvLeaves = document.getElementById('btnOverviewLeaves');
+      const btnOvHolidays = document.getElementById('btnOverviewHolidays');
+      const btnOvLunar = document.getElementById('btnOverviewLunar');
+      const btnOvIcal = document.getElementById('btnOverviewExportIcal');
+      const btnOvClear = document.getElementById('btnOverviewClearAll');
+
+      if (btnOvLeaves) btnOvLeaves.onclick = openOverviewLeavesModal;
+
+      if (btnOvTrip) btnOvTrip.onclick = openTravelModeModal;
+      if (btnOvIcal) btnOvIcal.onclick = openExportModal;
+      if (btnOvClear) {
+        btnOvClear.onclick = () => {
+          if (!isRoomUnlocked) {
+            showUnlockModal();
+            return;
+          }
+          if (!isEditMode) {
+            showToast('🔒 目前處於唯讀模式！請先按右上角「切換編輯模式」再重設。');
+            return;
+          }
+          openResetModal();
+        };
+      }
+
+      const modalHolidays = document.getElementById('modalOverviewHolidays');
+      const modalLunar = document.getElementById('modalOverviewLunar');
+      const btnCloseOvHolidays = document.getElementById('btnCloseOverviewHolidays');
+      const btnCloseOvLunar = document.getElementById('btnCloseOverviewLunar');
+      const bodyHolidays = document.getElementById('overviewHolidaysListBody');
+      const bodyLunar = document.getElementById('overviewLunarListBody');
+
+      if (btnOvHolidays) {
+        btnOvHolidays.onclick = () => {
+          const src = document.getElementById('tabContentHolidays');
+          if (src && bodyHolidays) {
+            bodyHolidays.innerHTML = src.innerHTML;
+          }
+          modalHolidays.classList.remove('hidden');
+        };
+      }
+      const btnCloseOvLeaves = document.getElementById('btnCloseOverviewLeaves');
+      if (btnCloseOvLeaves) {
+        btnCloseOvLeaves.onclick = () => {
+          const modal = document.getElementById('modalOverviewLeaves');
+          if (modal) modal.classList.add('hidden');
+        };
+      }
+      if (btnCloseOvHolidays) {
+        btnCloseOvHolidays.onclick = () => modalHolidays.classList.add('hidden');
+      }
+
+      if (btnOvLunar) {
+        btnOvLunar.onclick = () => {
+          const src = document.getElementById('tabContentLunar');
+          if (src && bodyLunar) {
+            bodyLunar.innerHTML = src.innerHTML;
+          }
+          modalLunar.classList.remove('hidden');
+        };
+      }
+      if (btnCloseOvLunar) {
+        btnCloseOvLunar.onclick = () => modalLunar.classList.add('hidden');
+      }
+    }
+
+    function run() {
+      loadLocalFirst();
+      renderMonthGrid();
+      updateDashboard();
+
+      checkRoomSecurityAndConnect();
+      initFlightBoardEvents();
+      setupOverviewTopActionButtons();
+
+      document.getElementById('btnToggleGlobalLock').onclick = toggleGlobalEditMode;
+
+      const btnOpenSync = document.getElementById('btnOpenSyncModal');
+      if (btnOpenSync) {
+        btnOpenSync.onclick = () => {
+          document.getElementById('mobileRoomInput').value = currentRoom;
+          document.getElementById('modalMobileSync').classList.remove('hidden');
+        };
+      }
+      document.getElementById('btnCloseMobileSync').onclick = () => {
+        document.getElementById('modalMobileSync').classList.add('hidden');
+      };
+      document.getElementById('btnMobileSwitchRoom').onclick = () => {
+        const val = document.getElementById('mobileRoomInput').value.trim().toUpperCase();
+        if (val) {
+          currentRoom = val;
+          localStorage.setItem('hk_sync_room_id', currentRoom);
+          const url = new URL(window.location);
+          url.searchParams.set('room', currentRoom);
+          window.history.replaceState({}, '', url);
+          loadLocalFirst();
+          renderMonthGrid();
+          updateDashboard();
+          checkRoomSecurityAndConnect();
+          document.getElementById('modalMobileSync').classList.add('hidden');
+        }
+      };
+
+      const btnDesktopSwitch = document.getElementById('btnDesktopSwitchRoom');
+      if (btnDesktopSwitch) {
+        btnDesktopSwitch.onclick = () => {
+          const val = document.getElementById('desktopRoomInput').value.trim().toUpperCase();
+          if (val) {
+            currentRoom = val;
+            localStorage.setItem('hk_sync_room_id', currentRoom);
+            const url = new URL(window.location);
+            url.searchParams.set('room', currentRoom);
+            window.history.replaceState({}, '', url);
+            loadLocalFirst();
+            renderMonthGrid();
+            updateDashboard();
+            checkRoomSecurityAndConnect();
+          }
+        };
+      }
+
+      document.getElementById('btnConfirmActivation').onclick = () => {
+        const pin = document.getElementById('actPinInput').value.trim();
+        const confirmPin = document.getElementById('actPinConfirmInput').value.trim();
+        const errEl = document.getElementById('actErrorMsg');
+
+        if (!/^\d{4,6}$/.test(pin)) {
+          errEl.textContent = '❌ 請輸入 4 至 6 位數純數字 PIN 碼！';
+          errEl.classList.remove('hidden');
+          return;
+        }
+        if (pin !== confirmPin) {
+          errEl.textContent = '❌ 兩次輸入的 PIN 碼不一致，請重新檢查！';
+          errEl.classList.remove('hidden');
+          return;
+        }
+
+        remoteRoomPin = pin;
+        isRoomUnlocked = true;
+        setLocalSavedPin(currentRoom, pin);
+        clearThrottle(currentRoom);
+
+        pushData();
+        closeAllAuthModals();
+        startFirebaseSSE();
+        alert(`🎉 專屬房間 (${currentRoom}) 已啟用成功！日後在此裝置可自動登入。`);
+      };
+
+      document.getElementById('btnSubmitUnlock').onclick = () => {
+        const lockMsg = checkThrottled(currentRoom);
+        const errEl = document.getElementById('unlockErrorMsg');
+        if (lockMsg) {
+          errEl.textContent = lockMsg;
+          return;
+        }
+
+        const inputPin = document.getElementById('unlockPinInput').value.trim();
+        if (inputPin === remoteRoomPin) {
+          isRoomUnlocked = true;
+          setLocalSavedPin(currentRoom, inputPin);
+          clearThrottle(currentRoom);
+          closeAllAuthModals();
+
+          fetch(`${FIREBASE_BASE_URL}/rooms/${currentRoom}.json`)
+            .then(res => res.json())
+            .then(data => {
+              if (data) applyRemoteData(data);
+              startFirebaseSSE();
+            });
+        } else {
+          const failMsg = recordFailedAttempt(currentRoom);
+          errEl.textContent = failMsg;
+        }
+      };
+
+      document.getElementById('btnConfirmResetPinAdmin').onclick = () => {
+        const keyVal = document.getElementById('inputAdminKey').value.trim();
+        const err = document.getElementById('adminKeyErrorMsg');
+
+        if (!keyVal) {
+          err.textContent = '❌ 請輸入安全管理金鑰！';
+          err.classList.remove('hidden');
+          return;
+        }
+
+        if (keyVal === ADMIN_OVERRIDE_KEY) {
+          fetch(`${FIREBASE_BASE_URL}/rooms/${currentRoom}/pin.json`, {
+            method: 'PUT',
+            body: JSON.stringify(null)
+          }).then(() => {
+            remoteRoomPin = null;
+            localStorage.removeItem(`room_auth_pin_${currentRoom}`);
+            clearThrottle(currentRoom);
+            closeResetPinModal();
+            showToast(`🎉 房間【${currentRoom}】密碼已清除！將重新進入首次啟用流程。`);
+            checkRoomSecurityAndConnect();
+          });
+        } else {
+          err.textContent = '❌ 安全金鑰錯誤！操作已被拒絕。';
+          err.classList.remove('hidden');
+        }
+      };
+
+      const btnDesktopResetPin = document.getElementById('btnDesktopResetPin');
+      const btnMobileResetPin = document.getElementById('btnMobileResetPin');
+      if (btnDesktopResetPin) btnDesktopResetPin.onclick = openResetPinModal;
+      if (btnMobileResetPin) btnMobileResetPin.onclick = openResetPinModal;
+      document.getElementById('btnCloseResetPinModal').onclick = closeResetPinModal;
+      document.getElementById('btnCancelResetPinModal').onclick = closeResetPinModal;
+
+      const aqInput = document.getElementById('annualQuotaInput');
+      if (aqInput) {
+        aqInput.oninput = (e) => {
+          annualQuota = parseFloat(e.target.value) || 0;
+          pushData();
+          updateDashboard();
+        };
+      }
+      const wqInput = document.getElementById('wbQuotaInput');
+      if (wqInput) {
+        wqInput.oninput = (e) => {
+          wbQuota = parseFloat(e.target.value) || 0;
+          pushData();
+          updateDashboard();
+        };
+      }
+
+      function handleBrushSelect(newBrush) {
+        activeBrush = newBrush;
+        syncActiveBrushUI();
+        if (newBrush === 'annual') {
+          showToast('', { title: '已選取：AL 年假', subtitle: '點擊循環：全日 ➔ AM ➔ PM ➔ 清除', icon: 'fa-solid fa-umbrella-beach', iconBg: 'bg-blue-600' });
+        } else if (newBrush === 'wb') {
+          showToast('', { title: '已選取：WB 假', subtitle: '點擊循環：AM ➔ PM ➔ 清除（無全日）', icon: 'fa-solid fa-heart-pulse', iconBg: 'bg-purple-600' });
+        } else if (newBrush === 'special') {
+          showToast('', { title: '已選取：S 特假', subtitle: '點擊循環：全日 ➔ AM ➔ PM ➔ 清除', icon: 'fa-solid fa-shield-halved', iconBg: 'bg-slate-700' });
+        } else if (newBrush === 'birthday') {
+          showToast('', { title: '已選取：BL 生日假', subtitle: '每年限登記 1 次', icon: 'fa-solid fa-cake-candles', iconBg: 'bg-emerald-600' });
+        } else if (newBrush === 'eraser') {
+          showToast('', { title: '清除模式', subtitle: '點擊已排定日子即可清除', icon: 'fa-solid fa-eraser', iconBg: 'bg-red-500' });
+        }
+      }
+
+      document.querySelectorAll('.brush-card').forEach(card => {
+        card.onclick = () => {
+          const b = card.getAttribute('data-brush');
+          handleBrushSelect(b);
+        };
+      });
+
+      document.querySelectorAll('.brush-capsule').forEach(cap => {
+        cap.onclick = () => {
+          const b = cap.getAttribute('data-brush');
+          handleBrushSelect(b);
+        };
+      });
+
+      document.querySelectorAll('.brush-btn').forEach(btn => {
+        btn.onclick = () => {
+          const b = btn.getAttribute('data-brush');
+          handleBrushSelect(b);
+        };
+      });
+
+      syncActiveBrushUI();
+
+      const clearBtn = document.getElementById('btnClearAll');
+      if (clearBtn) {
+        clearBtn.onclick = () => {
+          if (!isRoomUnlocked) {
+            showUnlockModal();
+            return;
+          }
+          if (!isEditMode) {
+            showToast('🔒 目前處於唯讀模式！請先按右上角「切換編輯模式」再重設。');
+            return;
+          }
+          openResetModal();
+        };
+      }
+
+      document.getElementById('btnCloseResetModal').onclick = closeResetModal;
+      document.getElementById('btnCancelResetAction').onclick = closeResetModal;
+
+      document.getElementById('btnConfirmSafeReset').onclick = () => {
+        const preserved = {};
+        let removedCount = 0;
+        let keptCount = 0;
+
+        for (const d in leaveData) {
+          if (leaveData[d] && leaveData[d].locked) {
+            preserved[d] = leaveData[d];
+            keptCount++;
+          } else {
+            removedCount++;
+          }
+        }
+
+        leaveData = preserved;
+        pushData();
+        renderMonthGrid();
+        updateDashboard();
+        closeResetModal();
+        showToast(`✅ 已清除 ${removedCount} 日未鎖定假期！`);
+      };
+
+      document.getElementById('btnConfirmForceReset').onclick = () => {
+        const allCount = Object.keys(leaveData).length;
+        if (confirm(`🚨【最終警示】\n確定要強制清除包括已鎖定在內的全部 ${allCount} 筆假期資料嗎？\n此動作無法復原！`)) {
+          leaveData = {};
+          pushData();
+          renderMonthGrid();
+          updateDashboard();
+          closeResetModal();
+          showToast(`🗑️ 已強制清空全部假期紀錄！`);
+        }
+      };
+
+      const expBtn = document.getElementById('btnExportIcal');
+      if (expBtn) expBtn.onclick = openExportModal;
+      document.getElementById('btnCloseExportModal').onclick = closeExportModal;
+      document.getElementById('btnCancelExportModal').onclick = closeExportModal;
+      document.getElementById('btnConfirmExportIcal').onclick = () => {
+        closeExportModal();
+        doExportIcalFile();
+      };
+
+      const tabLeaves = document.getElementById('tabBtnLeaves');
+      const tabHolidays = document.getElementById('tabBtnHolidays');
+      const tabLunar = document.getElementById('tabBtnLunar');
+      const contentLeaves = document.getElementById('tabContentLeaves');
+      const contentHolidays = document.getElementById('tabContentHolidays');
+      const contentLunar = document.getElementById('tabContentLunar');
+      const btnHeaderHolidays = document.getElementById('btnHeaderHolidays');
+      const btnHeaderLunar = document.getElementById('btnHeaderLunar');
+      const btnPanelScrollTop = document.getElementById('btnPanelScrollTop');
+      const btnScrollToTopFloating = document.getElementById('btnScrollToTopFloating');
+
+      function resetTabs() {
+        tabLeaves.className = 'px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-blue-700 hover:bg-blue-50/60 flex items-center gap-1 transition';
+        tabHolidays.className = 'px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-orange-700 hover:bg-orange-50/60 flex items-center gap-1 transition';
+        tabLunar.className = 'px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-amber-700 hover:bg-amber-50/60 flex items-center gap-1 transition';
+        contentLeaves.classList.add('hidden');
+        contentHolidays.classList.add('hidden');
+        contentLunar.classList.add('hidden');
+      }
+
+      function showLeavesTab() {
+        resetTabs();
+        tabLeaves.className = 'px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white text-blue-700 shadow-xs border border-slate-200 flex items-center gap-1 transition';
+        contentLeaves.classList.remove('hidden');
+      }
+
+      function showHolidaysTab() {
+        resetTabs();
+        tabHolidays.className = 'px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white text-orange-700 shadow-xs border border-orange-200 flex items-center gap-1 transition';
+        contentHolidays.classList.remove('hidden');
+      }
+
+      function showLunarTab() {
+        resetTabs();
+        tabLunar.className = 'px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white text-amber-800 shadow-xs border border-amber-200 flex items-center gap-1 transition';
+        contentLunar.classList.remove('hidden');
+      }
+
+      const btnHeaderLeaves = document.getElementById('btnHeaderLeaves');
+      if (btnHeaderLeaves) {
+        btnHeaderLeaves.onclick = openOverviewLeavesModal;
+      }
+      if (tabLeaves) tabLeaves.onclick = showLeavesTab;
+      if (tabHolidays) tabHolidays.onclick = showHolidaysTab;
+      if (tabLunar) tabLunar.onclick = showLunarTab;
+
+      if (btnHeaderHolidays) {
+        btnHeaderHolidays.onclick = () => {
+          showHolidaysTab();
+          const rp = document.getElementById('rightSidePanel');
+          if (rp) rp.scrollIntoView({ behavior: 'smooth' });
+        };
+      }
+
+      if (btnHeaderLunar) {
+        btnHeaderLunar.onclick = () => {
+          showLunarTab();
+          const rp = document.getElementById('rightSidePanel');
+          if (rp) rp.scrollIntoView({ behavior: 'smooth' });
+        };
+      }
+
+      const scrollToTop = () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+      if (btnPanelScrollTop) btnPanelScrollTop.onclick = scrollToTop;
+      if (btnScrollToTopFloating) btnScrollToTopFloating.onclick = scrollToTop;
+
+      window.addEventListener('scroll', () => {
+        if (window.scrollY > 280) {
+          btnScrollToTopFloating.classList.remove('opacity-0', 'pointer-events-none');
+          btnScrollToTopFloating.classList.add('opacity-100');
+        } else {
+          btnScrollToTopFloating.classList.remove('opacity-100');
+          btnScrollToTopFloating.classList.add('opacity-0', 'pointer-events-none');
+        }
+      });
+
+      const btnAutoTrip = document.getElementById('btnAutoGenerateTrip');
+      if (btnAutoTrip) btnAutoTrip.onclick = openTravelModeModal;
+
+      const btnCloseModal = document.getElementById('btnCloseTravelModal');
+      if (btnCloseModal) btnCloseModal.onclick = closeTravelModeModal;
+
+      const btnCancelModal = document.getElementById('btnCancelTravelModal');
+      if (btnCancelModal) btnCancelModal.onclick = closeTravelModeModal;
+
+      const btnModeMax = document.getElementById('btnModeMaxAL');
+      if (btnModeMax) btnModeMax.onclick = () => executeTravelVacation('max');
+
+      const btnModeCasual = document.getElementById('btnModeCasualAL');
+      if (btnModeCasual) btnModeCasual.onclick = () => executeTravelVacation('casual');
+
+      const btnModeMinimal = document.getElementById('btnModeMinimalAL');
+      if (btnModeMinimal) btnModeMinimal.onclick = () => executeTravelVacation('minimal');
+
+      setupYearOverviewToggle();
+
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && isRoomUnlocked) {
+          startFirebaseSSE();
+          pullData();
+        }
+      });
+      window.addEventListener('focus', () => {
+        if (isRoomUnlocked) pullData();
+      });
+
+      setInterval(() => {
+        if (isRoomUnlocked) pullData();
+      }, 5000);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', run);
+    } else {
+      run();
+    }
+  </script>
+
+</body>
+</html>
